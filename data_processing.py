@@ -1,24 +1,17 @@
-import os
-
 import numpy as np
 import pandas as pd
 import re
 import nltk
 import contractions
-import sklearn
 import scipy
 
 from string import punctuation
-from matplotlib import pyplot as plt
 from bs4 import BeautifulSoup
 from nltk.tokenize import ToktokTokenizer
 from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.corpus import stopwords
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn import model_selection
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import hamming_loss
 
 np.random.seed(seed=0)
 
@@ -41,7 +34,7 @@ class StackSampleDatasetLoader:
 
         if filter_dataset:
             self.filter_out_low_scoring_questions(score_threshold=score_threshold)
-            self.merged_df = self.merged_df.reset_index()
+            self.merged_df = self.merged_df.reset_index(drop=True)
 
         # Removing score and id columns
         self.merged_df.drop(columns=["Id", "Score"], inplace=True)
@@ -70,7 +63,7 @@ class StackSampleDatasetLoader:
 
     def print_dataset_deformitity_stats(self):
         print("Null Values:")
-        print(df.merged_df.isnull().sum(axis=0))
+        print(self.merged_df.isnull().sum(axis=0))
 
         print("\nDuplicate entries: {}".format(self.merged_df.duplicated().sum()))
 
@@ -96,7 +89,7 @@ class DatasetProcessing:
         def get_frequent_tags(tags):
             new_tags = []
             for tag in tags:
-                if tag in frequent_tags:
+                if tag in self.frequent_tags:
                     new_tags.append(tag)
             if new_tags == []:
                 new_tags = None
@@ -109,14 +102,17 @@ class DatasetProcessing:
         self.data_frame.dropna(subset=["Tags"], inplace=True)
 
     def question_text_processing(self):
+        print("Processing Body:")
+        print("-> Removing HTML Tags from text")
         # Extracting text from HTML in the body
         self.data_frame["Body"] = self.data_frame["Body"].apply(
-            lambda x: BeautifulSoup(x).get_text()
+            lambda x: BeautifulSoup(x, features="html.parser").get_text()
         )
 
         self.data_frame["Body"] = TextProcessor(
             text=self.data_frame["Body"], frequent_tags=self.frequent_tags
         ).get_processed_text()
+        print("\nProcessing Title:")
         self.data_frame["Title"] = TextProcessor(
             text=self.data_frame["Title"], frequent_tags=self.frequent_tags
         ).get_processed_text()
@@ -128,9 +124,13 @@ class TextProcessor:
         self.frequent_tags = frequent_tags
 
         text = text.apply(lambda x: str(x))
+        print("-> Cleaning text (abbreviations, etc.)")
         text = text.apply(self.clean_text)
+        print("-> Removing punctuations")
         text = text.apply(self.clean_puncts)
+        print("-> Lemmatizing")
         text = text.apply(self.lemmatize_words)
+        print("-> Removing Stop Words")
         text = text.apply(self.remove_stopwords)
 
         self.processed_text = text
@@ -199,15 +199,15 @@ class TextProcessor:
         except LookupError:
             nltk.download("stopwords")
             stop_words = set(stopwords.words("english"))
-        words = tokenizer.tokenize(text)
+        words = self.tokenizer.tokenize(text)
         filtered_list = [w for w in words if w not in stop_words]
         return " ".join(map(str, filtered_list))
 
 
 class DataPreparer:
     def __init__(self, data_frame):
-        tag_binarizer = MultiLabelBinarizer()
-        title_vectorizer = TfidfVectorizer(
+        self.tag_binarizer = MultiLabelBinarizer()
+        self.title_vectorizer = TfidfVectorizer(
             analyzer="word",
             min_df=0.0,
             max_df=1.0,
@@ -217,7 +217,7 @@ class DataPreparer:
             token_pattern=r"(?u)\S\S+",
             max_features=1000,
         )
-        body_vectorizer = TfidfVectorizer(
+        self.body_vectorizer = TfidfVectorizer(
             analyzer="word",
             min_df=0.0,
             max_df=1.0,
@@ -228,9 +228,9 @@ class DataPreparer:
             max_features=1000,
         )
 
-        self.binarized_tags = tag_binarizer.fit_transform(data_frame["Tags"])
-        vectorized_title = title_vectorizer.fit_transform(data_frame["Title"])
-        vectorized_body = body_vectorizer.fit_transform(data_frame["Body"])
+        self.binarized_tags = self.tag_binarizer.fit_transform(data_frame["Tags"])
+        vectorized_title = self.title_vectorizer.fit_transform(data_frame["Title"])
+        vectorized_body = self.body_vectorizer.fit_transform(data_frame["Body"])
         self.vectorized_questions = scipy.sparse.hstack(
             [vectorized_title, vectorized_body]
         )
