@@ -1,6 +1,7 @@
 import sklearn
 import numpy as np
-
+import torch
+import scipy
 
 def avg_jaccard(y_pred, y_true):
     """
@@ -17,3 +18,17 @@ def print_score(y_pred, y_true):
     print("Jacard score: {}".format(avg_jaccard(y_pred, y_true)))
     print("Hamming loss: {}".format(sklearn.metrics.hamming_loss(y_pred, y_true) * 100))
     print("---")
+
+
+def convert_scipy_csr_to_torch_coo(csr_matrix: scipy.sparse.csr.csr_matrix):
+    coo_matrix = csr_matrix.tocoo()
+
+    values = coo_matrix.data
+    indices = np.vstack((coo_matrix.row, coo_matrix.col))
+
+    i = torch.LongTensor(indices)
+    v = torch.FloatTensor(values)
+    shape = torch.Size(coo_matrix.shape)
+
+    return torch.sparse.FloatTensor(i, v, shape)
+

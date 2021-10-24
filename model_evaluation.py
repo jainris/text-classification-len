@@ -24,6 +24,7 @@ from data_processing import DatasetProcessing
 from data_processing import DataPreparer
 from utils import avg_jaccard
 from utils import print_score
+from utils import convert_scipy_csr_to_torch_coo
 
 
 class ModelEvaluator:
@@ -66,6 +67,21 @@ class ModelEvaluator:
         return y_pred
 
 
+class SparseToDenseDataset(torch.utils.data.Dataset):
+    def __init__(self, sparse_tensor, tags):
+        self.sparse_tensor = sparse_tensor
+        self.tags = tags
+
+    def __len__(self):
+        return self.sparse_tensor.shape[0]
+
+    def __getitem__(self, index):
+        x = self.sparse_tensor[index].to_dense()
+        y = self.tags[index]
+
+        return x, y
+
+
 @ignore_warnings(category=ConvergenceWarning)
 def run_basic_models():
     print("Obtaining the dataset")
@@ -99,29 +115,9 @@ def run_basic_models():
         print_score(y_pred=y_pred, y_true=evaluator.y_test)
 
 
-def run_len():
-    print("Obtaining the dataset")
-    evaluator = ModelEvaluator()
-
-    x_train = evaluator.x_train
-    y_train = evaluator.y_train
-    x_test = evaluator.x_test
-    y_test = evaluator.y_test
-
-    def convert_scipy_csr_to_torch_coo(csr_matrix: scipy.sparse.csr.csr_matrix):
-        coo_matrix = csr_matrix.tocoo()
-
-        values = coo_matrix.data
-        indices = np.vstack((coo_matrix.row, coo_matrix.col))
-
-        i = torch.LongTensor(indices)
-        v = torch.FloatTensor(values)
-        shape = torch.Size(coo_matrix.shape)
-
-        return torch.sparse.FloatTensor(i, v, shape)
-
-    x_train = convert_scipy_csr_to_torch_coo(x_train)
-
+def create_and_train_len(
+    x_train, y_train, batch_size=128, learning_rate=1, num_epochs=10
+):
     layers = [
         te.nn.EntropyLinear(x_train.shape[1], 10, n_classes=y_train.shape[1]),
         torch.nn.LeakyReLU(),
@@ -131,15 +127,24 @@ def run_len():
     ]
     model = torch.nn.Sequential(*layers)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     loss_form = torch.nn.BCEWithLogitsLoss()
     model.train()
-    for epoch in range(10):
+
+    training_dataset = SparseToDenseDataset(x_train, torch.FloatTensor(y_train))
+    trainig_data_generator = torch.utils.data.DataLoader(
+        training_dataset, batch_size=batch_size
+    )
+
+    for epoch in range(num_epochs):
         print("Epoch " + str(epoch + 1) + ":")
-        for i in range(1000):
+        i = 0
+        for x, y in trainig_data_generator:
+            if i == 50:
+                # Currently only training with limited samples
+                break
             print("Num -- " + str(i))
-            x = x_train[i].to_dense()
-            y = torch.FloatTensor(np.array([y_train[i]]))
+            i += 1
             optimizer.zero_grad()
             y_pred = model(x).squeeze(-1)
             loss = loss_form(y_pred, y) + 0.0001 * te.nn.functional.entropy_logic_loss(
@@ -148,18 +153,57 @@ def run_len():
             loss.backward()
             optimizer.step()
 
-    y_true = y_test[:1000]
+    return model
 
-    x_test = convert_scipy_csr_to_torch_coo(x_test)
+
+def test_len(model, x_test, y_test, batch_size=128):
+    testing_dataset = SparseToDenseDataset(x_test, torch.FloatTensor(y_test))
+    testing_data_generator = torch.utils.data.DataLoader(
+        testing_dataset, batch_size=batch_size
+    )
 
     y_preds = []
-    for i in range(1000):
+    y_true = []
+    i = 0
+    for x, y in testing_data_generator:
+        if i == 50:
+            # Currently only testing limited samples
+            break
         print("Num -- " + str(i))
-        x = x_test[i].to_dense()
+        i += 1
         y_preds.append(model(x).squeeze(-1))
+
+        y_true.append(y.numpy())
 
     y_preds = [torch.nn.Sigmoid()(yy).detach().numpy() for yy in y_preds]
     y_preds = np.stack(y_preds)
-    y_preds = y_preds.reshape((1000, 100))
+    y_preds = y_preds.reshape((y_preds.shape[0] * y_preds.shape[1], 100))
+
+    y_true = np.array(y_true).reshape(y_preds.shape)
+
+    y_preds = np.where(y_preds > 0.5, 1, 0)
 
     print_score(y_preds, y_true)
+
+
+def run_len(batch_size=128, learning_rate=1, num_epochs=10):
+    print("Obtaining the dataset")
+    evaluator = ModelEvaluator()
+
+    x_train = evaluator.x_train
+    y_train = evaluator.y_train
+    x_test = evaluator.x_test
+    y_test = evaluator.y_test
+
+    x_train = convert_scipy_csr_to_torch_coo(x_train)
+    x_test = convert_scipy_csr_to_torch_coo(x_test)
+
+    model = create_and_train_len(
+        x_train=x_train,
+        y_train=y_train,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        num_epochs=num_epochs,
+    )
+
+    test_len(model=model, x_test=x_test, y_test=y_test, batch_size=batch_size)
