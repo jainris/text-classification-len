@@ -3,7 +3,6 @@ import pandas as pd
 import torch_explain as te
 import torch
 import sklearn
-import scipy
 
 from sklearn.model_selection import train_test_split
 from sklearn.dummy import DummyClassifier
@@ -29,6 +28,7 @@ from utils import convert_scipy_csr_to_torch_coo
 
 class ModelEvaluator:
     def __init__(self, questions_path, tag_path):
+        self.data_prepper = None
         (
             self.x_train,
             self.x_test,
@@ -47,11 +47,11 @@ class ModelEvaluator:
         data_processor.filter_frequent_tags()
         data_processor.question_text_processing()
 
-        data_prepper = DataPreparer(data_frame=data_frame)
+        self.data_prepper = DataPreparer(data_frame=data_frame)
 
         return train_test_split(
-            data_prepper.vectorized_questions,
-            data_prepper.binarized_tags,
+            self.data_prepper.vectorized_questions,
+            self.data_prepper.binarized_tags,
             test_size=0.2,
             random_state=0,
         )

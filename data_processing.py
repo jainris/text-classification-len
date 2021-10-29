@@ -206,6 +206,7 @@ class TextProcessor:
 
 class DataPreparer:
     def __init__(self, data_frame):
+        self.data_frame = data_frame
         self.tag_binarizer = MultiLabelBinarizer()
         self.title_vectorizer = TfidfVectorizer(
             analyzer="word",
