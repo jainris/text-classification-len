@@ -6,8 +6,12 @@ python:
   - "3.7"
 
 install:
-  - pip install numpy pytest sklearn scipy pandas contractions nltk
+  - pip install numpy sklearn scipy pandas contractions nltk
   - pip install torch torch_explain
+  - pip install pytest pytest-cov codecov
 
 script:
-  - pytest
+  - pytest --cov-report term --cov=text_classifier_len tests
+
+after_success:
+  - codecov

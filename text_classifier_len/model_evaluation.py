@@ -18,12 +18,12 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.utils._testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
 
-from data_processing import StackSampleDatasetLoader
-from data_processing import DatasetProcessing
-from data_processing import DataPreparer
-from utils import avg_jaccard
-from utils import print_score
-from utils import convert_scipy_csr_to_torch_coo
+from text_classifier_len.data_processing import StackSampleDatasetLoader
+from text_classifier_len.data_processing import DatasetProcessing
+from text_classifier_len.data_processing import DataPreparer
+from text_classifier_len.utils import avg_jaccard
+from text_classifier_len.utils import print_score
+from text_classifier_len.utils import convert_scipy_csr_to_torch_coo
 
 
 class ModelEvaluator:

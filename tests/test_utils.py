@@ -1,8 +1,8 @@
 import pytest
 import numpy as np
 
-from utils import avg_jaccard
-from utils import convert_scipy_csr_to_torch_coo
+from text_classifier_len.utils import avg_jaccard
+from text_classifier_len.utils import convert_scipy_csr_to_torch_coo
 
 
 @pytest.mark.parametrize("y_pred, y_true", [
