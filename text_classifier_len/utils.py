@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import scipy
 
+from scipy import sparse
+
 def avg_jaccard(y_pred, y_true):
     """
     see https://en.wikipedia.org/wiki/Multi-label_classification#Statistics_and_evaluation_metrics
@@ -20,7 +22,7 @@ def print_score(y_pred, y_true):
     print("---")
 
 
-def convert_scipy_csr_to_torch_coo(csr_matrix: scipy.sparse.csr.csr_matrix):
+def convert_scipy_csr_to_torch_coo(csr_matrix: sparse.csr.csr_matrix):
     coo_matrix = csr_matrix.tocoo()
 
     values = coo_matrix.data

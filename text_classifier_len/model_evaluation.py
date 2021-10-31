@@ -57,7 +57,6 @@ class ModelEvaluator:
         )
 
     def evaluate(self, classifier, one_vs_rest=False):
-        classifier_name = classifier.__class__.__name__
         if one_vs_rest:
             classifier = OneVsRestClassifier(classifier)
 
@@ -83,9 +82,9 @@ class SparseToDenseDataset(torch.utils.data.Dataset):
 
 
 @ignore_warnings(category=ConvergenceWarning)
-def run_basic_models():
+def run_basic_models(questions_path, tag_path):
     print("Obtaining the dataset")
-    evaluator = ModelEvaluator()
+    evaluator = ModelEvaluator(questions_path=questions_path, tag_path=tag_path)
 
     CV_svc = sklearn.model_selection.GridSearchCV(
         estimator=OneVsRestClassifier(LinearSVC()),
@@ -112,6 +111,7 @@ def run_basic_models():
     for arg in args:
         classifier, one_vs_rest = arg
         y_pred = evaluator.evaluate(classifier=classifier, one_vs_rest=one_vs_rest)
+        print("Clf: {}".format(classifier.__class__.__name__))
         print_score(y_pred=y_pred, y_true=evaluator.y_test)
 
 
