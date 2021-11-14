@@ -1,11 +1,11 @@
-import sklearn
+from sklearn import metrics
 import numpy as np
 import torch
-import scipy
 
 from scipy import sparse
 
-def avg_jaccard(y_pred, y_true):
+
+def avg_jaccard(y_true, y_pred):
     """
     see https://en.wikipedia.org/wiki/Multi-label_classification#Statistics_and_evaluation_metrics
     """
@@ -17,8 +17,9 @@ def avg_jaccard(y_pred, y_true):
 
 
 def print_score(y_pred, y_true):
-    print("Jacard score: {}".format(avg_jaccard(y_pred, y_true)))
-    print("Hamming loss: {}".format(sklearn.metrics.hamming_loss(y_pred, y_true) * 100))
+    print("F1 score: {}".format(metrics.f1_score(y_true, y_pred, average="weighted")))
+    print("Jacard score: {}".format(avg_jaccard(y_true, y_pred)))
+    print("Hamming loss: {}".format(metrics.hamming_loss(y_true, y_pred) * 100))
     print("---")
 
 

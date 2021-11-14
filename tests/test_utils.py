@@ -3,6 +3,7 @@ import pytest
 import numpy as np
 
 from text_classifier_len.utils import avg_jaccard
+from text_classifier_len.utils import print_score
 from text_classifier_len.utils import convert_scipy_csr_to_torch_coo
 
 
@@ -20,6 +21,14 @@ def test_avg_jaccard(y_pred, y_true):
     assert jaccard_score.shape == ()
     # Expecting the value in [0, 100] range
     assert 0 <= jaccard_score <= 100
+
+
+@pytest.mark.parametrize("y_shape", [(4, 6), (5, 3)])
+def test_print_score(y_shape):
+    y_true = np.random.choice([0, 1], size=y_shape)
+    y_pred = np.random.choice([0, 1], size=y_shape)
+
+    print_score(y_pred=y_pred, y_true=y_true)
 
 
 @pytest.mark.parametrize("input_shape", [(4, 6), (5, 3)])
