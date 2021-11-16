@@ -70,16 +70,17 @@ class ModelEvaluator:
 
 
 class SparseToDenseDataset(torch.utils.data.Dataset):
-    def __init__(self, sparse_tensor, tags):
+    def __init__(self, sparse_tensor, tags, device):
         self.sparse_tensor = sparse_tensor
         self.tags = tags
+        self.device = device
 
     def __len__(self):
         return self.sparse_tensor.shape[0]
 
     def __getitem__(self, index):
-        x = self.sparse_tensor[index].to_dense()
-        y = self.tags[index]
+        x = self.sparse_tensor[index].to_dense().to(self.device)
+        y = self.tags[index].to(self.device)
 
         return x, y
 
@@ -126,7 +127,10 @@ def create_and_train_len(
     num_epochs=10,
     save_the_model=False,
     model_path=None,
+    use_cuda=True,
 ):
+    device = torch.device('cuda:0' if use_cuda and torch.cuda.is_available() else 'cpu')
+
     layers = [
         te.nn.EntropyLinear(x_train.shape[1], 10, n_classes=y_train.shape[1]),
         torch.nn.LeakyReLU(),
@@ -135,6 +139,8 @@ def create_and_train_len(
         torch.nn.Linear(4, 1),
     ]
     model = torch.nn.Sequential(*layers)
+
+    model.to(device=device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     loss_form = torch.nn.BCEWithLogitsLoss()
@@ -153,6 +159,7 @@ def create_and_train_len(
             training_dataset = SparseToDenseDataset(
                 convert_scipy_csr_to_torch_coo(x_train[train_idx]),
                 torch.FloatTensor(y_train[train_idx]),
+                device,
             )
             trainig_data_generator = torch.utils.data.DataLoader(
                 training_dataset, batch_size=batch_size
@@ -161,6 +168,7 @@ def create_and_train_len(
             validation_dataset = SparseToDenseDataset(
                 convert_scipy_csr_to_torch_coo(x_train[val_idx]),
                 torch.FloatTensor(y_train[val_idx]),
+                device
             )
             validation_data_generator = torch.utils.data.DataLoader(
                 validation_dataset, batch_size=batch_size
