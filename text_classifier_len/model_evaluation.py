@@ -146,7 +146,8 @@ def create_and_train_len(
 
     model.to(device=device)
 
-    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     loss_form = torch.nn.BCEWithLogitsLoss()
     model.train()
 
@@ -256,8 +257,8 @@ def create_and_train_len(
     return model
 
 
-def test_len(model, x_test, y_test, batch_size=128):
-    testing_dataset = SparseToDenseDataset(x_test, torch.FloatTensor(y_test))
+def test_len(model, x_test, y_test, batch_size=128, device="cpu"):
+    testing_dataset = SparseToDenseDataset(convert_scipy_csr_to_torch_coo(x_test), torch.FloatTensor(y_test), device=device)
     testing_data_generator = torch.utils.data.DataLoader(
         testing_dataset, batch_size=batch_size
     )
@@ -266,16 +267,20 @@ def test_len(model, x_test, y_test, batch_size=128):
     y_true = []
     i = 0
     for x, y in testing_data_generator:
-        if i == 50:
-            # Currently only testing limited samples
-            break
+        # if i == 50:
+        #     # Currently only testing limited samples
+        #     break
         print("Num -- " + str(i))
         i += 1
-        y_preds.append(model(x).squeeze(-1))
+        y_preds.append(model(x).squeeze(-1).detach().cpu())
 
-        y_true.append(y.numpy())
+        y_true.append(y.cpu().numpy())
 
-    y_preds = [torch.nn.Sigmoid()(yy).detach().numpy() for yy in y_preds]
+    y_preds = [torch.nn.Sigmoid()(yy).detach().cpu().numpy() for yy in y_preds]
+
+    y_preds = y_preds[:-1]
+    y_true = y_true[:-1]
+
     y_preds = np.stack(y_preds)
     y_preds = y_preds.reshape((y_preds.shape[0] * y_preds.shape[1], 100))
 
@@ -298,7 +303,7 @@ def run_len(
     y_test = evaluator.y_test
 
     # x_train = convert_scipy_csr_to_torch_coo(x_train)
-    x_test = convert_scipy_csr_to_torch_coo(x_test)
+    # x_test = convert_scipy_csr_to_torch_coo(x_test)
 
     model = create_and_train_len(
         x_train=x_train,

@@ -20,10 +20,10 @@ model = create_and_train_len(
     x_train=x_train,
     y_train=y_train,
     batch_size=512,
-    learning_rate=0.005,
-    num_epochs=50,
+    learning_rate=0.25,
+    num_epochs=250,
     save_the_model=True,
-    model_path="model",
+    model_path="model_3",
     use_cuda=True,
     load_model=True,
 )
