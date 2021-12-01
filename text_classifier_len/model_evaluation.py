@@ -20,6 +20,8 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.utils._testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
 
+from torch_explain.logic.nn import entropy
+
 from text_classifier_len.data_processing import StackSampleDatasetLoader
 from text_classifier_len.data_processing import DatasetProcessing
 from text_classifier_len.data_processing import DataPreparer
@@ -258,7 +260,9 @@ def create_and_train_len(
 
 
 def test_len(model, x_test, y_test, batch_size=128, device="cpu"):
-    testing_dataset = SparseToDenseDataset(convert_scipy_csr_to_torch_coo(x_test), torch.FloatTensor(y_test), device=device)
+    testing_dataset = SparseToDenseDataset(
+        convert_scipy_csr_to_torch_coo(x_test), torch.FloatTensor(y_test), device=device
+    )
     testing_data_generator = torch.utils.data.DataLoader(
         testing_dataset, batch_size=batch_size
     )
@@ -289,6 +293,53 @@ def test_len(model, x_test, y_test, batch_size=128, device="cpu"):
     y_preds = np.where(y_preds > 0.5, 1, 0)
 
     print_score(y_preds, y_true)
+
+
+def get_len_explanation(
+    model,
+    input_tensor,
+    expected_output_tensor,
+    evaluator,
+    validation_input_tensor=None,
+    validation_output_tensor=None,
+    max_minterm_complexity=10,
+):
+    if validation_input_tensor is None:
+        assert (
+            validation_output_tensor is None
+        ), "Can't have a non-None validation output tensor if validation \
+            input tensor is None"
+        validation_input_tensor = input_tensor
+        validation_output_tensor = expected_output_tensor
+    else:
+        assert (
+            validation_output_tensor is not None
+        ), "Can't have a None validation output tensor if validation input \
+            tensor is not None"
+
+    concept_names = [
+        name + " (title)"
+        for name in list(
+            evaluator.data_prepper.title_vectorizer.get_feature_names_out()
+        )
+    ] + [
+        name + " (body)"
+        for name in list(evaluator.data_prepper.body_vectorizer.get_feature_names_out())
+    ]
+    tags = evaluator.data_prepper.tag_binarizer.classes_
+
+    for i in range(expected_output_tensor.size()[-1]):
+        explanation, _ = entropy.explain_class(
+            model,
+            input_tensor,
+            expected_output_tensor,
+            validation_input_tensor,
+            validation_output_tensor,
+            target_class=i,
+            concept_names=concept_names,
+            max_minterm_complexity=max_minterm_complexity,
+        )
+        print("{}: {}".format(tags[i], explanation))
 
 
 def run_len(
