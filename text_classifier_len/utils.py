@@ -1,8 +1,9 @@
-from sklearn import metrics
 import numpy as np
 import torch
 
+from sklearn import metrics
 from scipy import sparse
+from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 
 
 def avg_jaccard(y_true, y_pred):
@@ -35,3 +36,11 @@ def convert_scipy_csr_to_torch_coo(csr_matrix: sparse.csr.csr_matrix):
 
     return torch.sparse.FloatTensor(i, v, shape)
 
+
+def get_single_stratified_split(X, y, n_splits, random_state=0):
+    kfold = MultilabelStratifiedKFold(
+        n_splits=n_splits, shuffle=True, random_state=random_state
+    )
+    train_idx, test_idx = next(kfold.split(X, y))
+
+    return X[train_idx], X[test_idx], y[train_idx], y[test_idx]
