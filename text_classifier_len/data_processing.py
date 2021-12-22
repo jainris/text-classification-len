@@ -232,6 +232,6 @@ class DataPreparer:
         self.binarized_tags = self.tag_binarizer.fit_transform(data_frame["Tags"])
         vectorized_title = self.title_vectorizer.fit_transform(data_frame["Title"])
         vectorized_body = self.body_vectorizer.fit_transform(data_frame["Body"])
-        self.vectorized_questions = scipy.sparse.hstack(
-            [vectorized_title, vectorized_body]
+        self.vectorized_questions = scipy.sparse.csr_matrix(
+            scipy.sparse.hstack([vectorized_title, vectorized_body])
         )
