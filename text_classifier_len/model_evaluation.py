@@ -1,5 +1,7 @@
 import numpy as np
 import pandas as pd
+from torch import optim
+from torch.nn.modules.loss import BCEWithLogitsLoss
 import torch_explain as te
 import torch
 import scipy
@@ -20,9 +22,7 @@ from sklearn.utils._testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
 
 from torch_explain.logic.nn import entropy
-
 from lime.lime_text import LimeTextExplainer
-
 from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 
 from text_classifier_len.data_processing import StackSampleDatasetLoader
@@ -153,8 +153,11 @@ class ModelEvaluator:
 
         Returns
         -------
-        y_pred : np.ndarray (TODO Check the exact type)
+        y_pred : np.ndarray
             The prediction as obtained from the classifier.
+
+        classifier
+            The trained classifier.
         """
         if one_vs_rest:
             classifier = OneVsRestClassifier(classifier)
@@ -162,19 +165,51 @@ class ModelEvaluator:
         classifier.fit(self.x_train, self.y_train)
         y_pred = classifier.predict(self.x_test)
 
-        return y_pred
+        return y_pred, classifier
 
 
 class SparseToDenseDataset(torch.utils.data.Dataset):
+    """
+    Dataset generator that takes sparse Torch.Tensor and generates
+    a dense Tensor.
+
+    Attributes
+    ----------
+    sparse_tensor : Torch.Tensor (TODO Check exact type)
+        The sparse input tensor.
+
+    tags : np.ndarray (TODO Check exact type)
+        The expected tags related to the input tensor.
+
+    device : torch.device (TODO Check exact type)
+        The device to which the output has to be targetted/outputted.
+    """
+
     def __init__(self, sparse_tensor, tags, device):
+        """
+        Initializes the object and gets the sparse tensor, tags and the device.
+
+        Parameters
+        ----------
+        sparse_tensor : Torch.Tensor (TODO Check exact type)
+        The sparse input tensor.
+
+        tags : np.ndarray (TODO Check exact type)
+            The expected tags related to the input tensor.
+
+        device : torch.device (TODO Check exact type)
+            The device to which the output has to be targetted/outputted.
+        """
         self.sparse_tensor = sparse_tensor
         self.tags = tags
         self.device = device
 
     def __len__(self):
+        """ Returns the length of the generator """
         return self.sparse_tensor.shape[0]
 
     def __getitem__(self, index):
+        """ Returns the dense Tensor and expected tag for given index """
         x = self.sparse_tensor[index].to_dense().to(self.device)
         y = self.tags[index].to(self.device)
 
@@ -183,6 +218,20 @@ class SparseToDenseDataset(torch.utils.data.Dataset):
 
 @ignore_warnings(category=ConvergenceWarning)
 def run_basic_models(questions_path, tag_path):
+    """
+    Runs and evaluates some basic models. Models tested:
+    DummyClassifier, SGDClassifier, LogisticRegression, MultinomialNB,
+    LinearSVC, Perceptron, PassiveAggressiveClassifier, MLPClassifier,
+    RandomForestClassifier
+
+    Parameters
+    ----------
+    questions_path : str
+        Path to Questions.csv.
+
+    tag_path : str
+        Path to Tags.csv.
+    """
     print("Obtaining the dataset")
     evaluator = ModelEvaluator(questions_path=questions_path, tag_path=tag_path)
 
@@ -210,7 +259,7 @@ def run_basic_models(questions_path, tag_path):
 
     for arg in args:
         classifier, one_vs_rest = arg
-        y_pred = evaluator.evaluate(classifier=classifier, one_vs_rest=one_vs_rest)
+        y_pred, _ = evaluator.evaluate(classifier=classifier, one_vs_rest=one_vs_rest)
         print("Clf: {}".format(classifier.__class__.__name__))
         print_score(y_pred=y_pred, y_true=evaluator.y_test)
 
@@ -226,6 +275,14 @@ def create_and_train_len(
     use_cuda=True,
     load_model=False,
 ):
+    """
+    Creates and trains a model with a Linear Entropy Layer from Logic
+    Explained Networks.
+
+    Parameters
+    ----------
+    TODO
+    """
     device = torch.device("cuda:0" if use_cuda and torch.cuda.is_available() else "cpu")
 
     layers = [
@@ -242,7 +299,7 @@ def create_and_train_len(
 
     model.to(device=device)
 
-    model = train_model(
+    model, _ = train_model(
         model=model,
         x_train=x_train,
         y_train=y_train,
@@ -270,11 +327,31 @@ def train_model(
     num_epochs=10,
     save_the_model=False,
     model_path=None,
+    loss_func=None,
 ):
+    """
+    Trains a PyTorch Model.
+
+    Parameters
+    ----------
+    TODO
+    """
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
     # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    loss_form = torch.nn.BCEWithLogitsLoss()
+    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    #     optimizer=optimizer, mode="max", factor=0.1, patience=4, cooldown=5, min_lr=1e-4
+    # )
+    scheduler = torch.optim.lr_scheduler.StepLR(
+        optimizer=optimizer, step_size=30, gamma=0.1
+    )
     model.train()
+
+    if loss_func is None:
+        loss_form = torch.nn.BCEWithLogitsLoss()
+        loss_func = lambda y_exp, y_act, model, x: loss_form(
+            y_exp, y_act
+        ) + 1e-4 * te.nn.functional.entropy_logic_loss(model)
+    history = []
 
     n_splits = 5
     kf = MultilabelStratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
@@ -284,7 +361,7 @@ def train_model(
     ep = 0
 
     for epoch in range(num_epochs // n_splits):
-        for train_idx, val_idx in kf.split(x_train):
+        for train_idx, val_idx in kf.split(x_train, y_train):
             ep += 1
             training_dataset = SparseToDenseDataset(
                 convert_scipy_csr_to_torch_coo(x_train[train_idx]),
@@ -314,9 +391,7 @@ def train_model(
                 #     break
                 optimizer.zero_grad()
                 y_pred = model(x).squeeze(-1)
-                loss = loss_form(
-                    y_pred, y
-                ) + 1e-4 * te.nn.functional.entropy_logic_loss(model)
+                loss = loss_func(y_pred, y, model, x)
                 loss.backward()
                 optimizer.step()
                 print(
@@ -344,9 +419,7 @@ def train_model(
                 num_val += 1
 
                 y_pred = model(x).squeeze(-1)
-                loss = loss_form(
-                    y_pred, y
-                ) + 1e-4 * te.nn.functional.entropy_logic_loss(model)
+                loss = loss_func(y_pred, y, model, x)
 
                 y_true = y.cpu().numpy()
 
@@ -368,6 +441,10 @@ def train_model(
                 )
             )
 
+            scheduler.step()
+
+            history.append(valid_loss / num_val)
+
             if save_the_model and valid_loss > min_valid_loss:
                 print(
                     "Validation score increased!!! ({} -> {})   Saving the model".format(
@@ -378,10 +455,84 @@ def train_model(
 
                 torch.save(model.state_dict(), model_path)
 
+    return model, history
+
+
+def train_len_model_with_another_model(
+    referrence_model,
+    x_train,
+    y_train,
+    batch_size=128,
+    learning_rate=5e-3,
+    num_epochs=10,
+    save_the_model=False,
+    model_path=None,
+    use_cuda=True,
+    load_model=False,
+):
+    """
+    Creates a model with a Linear Entropy Layer from Logic Explained Networks
+    and trains it with output from given model.
+
+    Parameters
+    ----------
+    TODO
+    """
+    device = torch.device("cuda:0" if use_cuda and torch.cuda.is_available() else "cpu")
+
+    layers = [
+        te.nn.EntropyLinear(x_train.shape[1], 10, n_classes=y_train.shape[1]),
+        torch.nn.LeakyReLU(),
+        torch.nn.Linear(10, 4),
+        torch.nn.LeakyReLU(),
+        torch.nn.Linear(4, 1),
+    ]
+    model = torch.nn.Sequential(*layers)
+
+    if load_model:
+        model.load_state_dict(torch.load(model_path))
+
+    model.to(device=device)
+
+    # Setting the loss_function to actually reflect the difference in the
+    # LEN model and the given referrence model
+    loss_form = torch.nn.BCEWithLogitsLoss()
+
+    def loss_func(y_exp, y_act, model, x):
+        # Ignoring the given y_exp
+        # Instead calculating using the reference model
+        y_exp = referrence_model(x)
+        return loss_form(y_exp, y_act) + 1e-4 * te.nn.functional.entropy_logic_loss(
+            model
+        )
+
+    model, _ = train_model(
+        model=model,
+        x_train=x_train,
+        y_train=y_train,
+        device=device,
+        batch_size=batch_size,
+        learning_rate=learning_rate,
+        num_epochs=num_epochs,
+        save_the_model=save_the_model,
+        model_path=model_path,
+        loss_func=loss_func,
+    )
+
+    # Adding a Sigmoid layer
+    model.add_module(sum(1 for _ in model.children()), torch.nn.Sigmoid())
+
     return model
 
 
 def test_torch_model(model, x_test, y_test, batch_size=128, device="cpu"):
+    """
+    Tests a PyTorch Model. Prints the obtained score.
+
+    Parameters
+    ----------
+    TODO
+    """
     testing_dataset = SparseToDenseDataset(
         convert_scipy_csr_to_torch_coo(x_test), torch.FloatTensor(y_test), device=device
     )
@@ -515,7 +666,7 @@ def run_lime(
 
     model.to(device)
 
-    model = train_model(
+    model, _ = train_model(
         model=model,
         x_train=x_train,
         y_train=y_train,
