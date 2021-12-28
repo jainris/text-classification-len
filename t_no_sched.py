@@ -213,7 +213,7 @@ def train_model(
                 )
             )
 
-            history.append((valid_loss / num_val, tot_loss / len(tot_loss)))
+            history.append((valid_loss / num_val, tot_loss / len(trainig_data_generator)))
 
             if save_the_model and valid_loss > min_valid_loss:
                 print(

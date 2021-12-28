@@ -218,7 +218,7 @@ def train_model(
 
             lr = [float(param_group["lr"]) for param_group in optimizer.param_groups]
 
-            history.append((valid_loss / num_val, lr, tot_loss / len(tot_loss)))
+            history.append((valid_loss / num_val, lr, tot_loss / len(trainig_data_generator)))
             scheduler.step(valid_loss)
 
             if save_the_model and valid_loss > min_valid_loss:
