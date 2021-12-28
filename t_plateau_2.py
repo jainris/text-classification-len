@@ -37,8 +37,6 @@ from text_classifier_len.utils import print_score
 from text_classifier_len.utils import convert_scipy_csr_to_torch_coo
 from text_classifier_len.utils import get_single_stratified_split
 
-import torch.nn.functional as F
-
 
 class JaccardLoss(torch.nn.Module):
     def __init__(self, include_sigmoid=False):
@@ -47,7 +45,7 @@ class JaccardLoss(torch.nn.Module):
 
     def forward(self, y_pred, y_exp, smooth=1):
         if self.include_sigmoid:
-            y_pred = F.sigmoid(y_pred)
+            y_pred = y_pred.sigmoid()
 
         # #flatten label and prediction tensors
         # inputs = inputs.view(-1)
