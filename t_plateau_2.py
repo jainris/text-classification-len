@@ -245,3 +245,8 @@ model, history = train_model(
     save_the_model=True,
     model_path="10tags_plateau_jaccard_loss",
 )
+
+import pickle
+
+with open("history_plateau_jaccard_loss", "wb") as f:
+    pickle.dump(history, f)

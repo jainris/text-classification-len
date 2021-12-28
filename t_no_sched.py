@@ -242,5 +242,5 @@ model, history = train_model(
 
 import pickle
 
-with open("no_sched_training_2", "wb") as f:
+with open("history_no_sched_training_2", "wb") as f:
     pickle.dump(history, f)
