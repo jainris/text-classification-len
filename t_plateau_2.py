@@ -156,6 +156,7 @@ def train_model(
 
             last_run_loss = 0.0
             running_loss = 0.0
+            tot_loss = 0.0
             print("Epoch {}".format(epoch + 1), end="\r")
             for i, data in enumerate(trainig_data_generator, 0):
                 x, y = data
@@ -175,6 +176,7 @@ def train_model(
                 )
 
                 running_loss += loss.item()
+                tot_loss += loss.item()
                 if i % 50 == 49:  # print every 50 batches
                     print(
                         "\rEpoch, Batch: [{}, {}] -- Loss: {}".format(
@@ -216,7 +218,7 @@ def train_model(
 
             lr = [float(param_group["lr"]) for param_group in optimizer.param_groups]
 
-            history.append((valid_loss / num_val, lr))
+            history.append((valid_loss / num_val, lr, tot_loss / len(tot_loss)))
             scheduler.step(valid_loss)
 
             if save_the_model and valid_loss > min_valid_loss:
@@ -238,8 +240,8 @@ model, history = train_model(
     y_train=y_train,
     device=device,
     batch_size=512,
-    learning_rate=1,
-    num_epochs=300,
+    learning_rate=10,
+    num_epochs=1000,
     save_the_model=True,
     model_path="10tags_plateau_jaccard_loss",
 )
