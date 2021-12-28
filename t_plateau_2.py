@@ -116,6 +116,8 @@ def train_model(
         cooldown=0,
         verbose=True,
         min_lr=1e-1,
+        threshold=1e-2,
+        threshold_mode='abs',
     )
     model.train()
 
@@ -240,8 +242,8 @@ model, history = train_model(
     y_train=y_train,
     device=device,
     batch_size=512,
-    learning_rate=10,
-    num_epochs=1000,
+    learning_rate=20,
+    num_epochs=2500,
     save_the_model=True,
     model_path="10tags_plateau_jaccard_loss",
 )
