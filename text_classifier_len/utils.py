@@ -19,7 +19,7 @@ def avg_jaccard(y_true, y_pred):
 
 def print_score(y_pred, y_true):
     print("F1 score: {}".format(metrics.f1_score(y_true, y_pred, average="weighted")))
-    print("Jacard score: {}".format(avg_jaccard(y_true, y_pred)))
+    print("Jaccard score: {}".format(avg_jaccard(y_true, y_pred)))
     print("Hamming loss: {}".format(metrics.hamming_loss(y_true, y_pred) * 100))
     print("---")
 
