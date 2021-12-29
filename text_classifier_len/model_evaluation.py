@@ -368,7 +368,7 @@ def train_model(
                 torch.FloatTensor(y_train[train_idx]),
                 device,
             )
-            trainig_data_generator = torch.utils.data.DataLoader(
+            training_data_generator = torch.utils.data.DataLoader(
                 training_dataset, batch_size=batch_size
             )
 
@@ -384,7 +384,7 @@ def train_model(
             last_run_loss = 0.0
             running_loss = 0.0
             print("Epoch {}".format(epoch + 1), end="\r")
-            for i, data in enumerate(trainig_data_generator, 0):
+            for i, data in enumerate(training_data_generator, 0):
                 x, y = data
                 # if i == 50:
                 #     # Currently only training with limited samples
@@ -459,7 +459,7 @@ def train_model(
 
 
 def train_len_model_with_another_model(
-    referrence_model,
+    reference_model,
     x_train,
     y_train,
     batch_size=128,
@@ -495,13 +495,13 @@ def train_len_model_with_another_model(
     model.to(device=device)
 
     # Setting the loss_function to actually reflect the difference in the
-    # LEN model and the given referrence model
+    # LEN model and the given reference model
     loss_form = torch.nn.BCEWithLogitsLoss()
 
     def loss_func(y_exp, y_act, model, x):
         # Ignoring the given y_exp
         # Instead calculating using the reference model
-        y_exp = referrence_model(x)
+        y_exp = reference_model(x)
         return loss_form(y_exp, y_act) + 1e-4 * te.nn.functional.entropy_logic_loss(
             model
         )
@@ -705,7 +705,7 @@ def run_lime(
     y_exp = df.iloc[idx_to_get_explanation][2]
 
     def run_model(inp_data):
-        def conv_string_to_model_input(list_of_inp_data):
+        def convert_string_to_model_input(list_of_inp_data):
             res = []
             for inp_data in list_of_inp_data:
                 title, body = inp_data.split("*&*&*")
@@ -714,7 +714,7 @@ def run_lime(
                 res.append(scipy.sparse.hstack([title, body]))
             return scipy.sparse.vstack(res)
 
-        inp_data = conv_string_to_model_input(inp_data)
+        inp_data = convert_string_to_model_input(inp_data)
         inp_data = convert_scipy_csr_to_torch_coo(inp_data)
         # return torch.nn.Sigmoid()(model(inp_data)).detach().numpy()
         return model(inp_data).detach().numpy()
