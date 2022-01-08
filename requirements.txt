@@ -1,0 +1,15 @@
+scipy==1.6.1
+pandas==1.2.3
+numpy==1.19.5
+nltk==3.6.2
+seaborn==0.11.1
+matplotlib==3.3.4
+beautifulsoup4==4.10.0
+captum==0.4.1
+contractions==0.0.58
+lime==0.2.0.1
+scikit_learn==1.0.2
+sympy==1.9
+torch==1.10.1
+torch_explain==0.6.5
+pytest==6.2.2

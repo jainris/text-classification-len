@@ -26,7 +26,7 @@ def default_perturb_func(inputs: Tensor, perturb_radius: float = 0.02) -> Tensor
     return perturbed_input
 
 
-def get_attributes(formula: str) -> Tuple(Any, Set, List, Callable):
+def get_attributes(formula: str) -> Tuple[Any, Set, List, Callable]:
     if formula is None:
         return None, set(), list(), lambda *args: False
     formula = sympy.sympify(formula)
@@ -78,7 +78,7 @@ def get_importance_sorted_inputs_lime_like(
     inputs: Tensor,
     target: int,
     explanation_func: Callable[[Module, Tensor, int], Tensor],
-) -> Generator[Tuple(int, bool), None, None]:
+) -> Generator[Tuple[int, bool], None, None]:
     explanation = explanation_func(model, inputs, target)
     exp_idx = [(explanation[i], i) for i in range(len(explanation))]
     exp_idx.sort(key=lambda x: np.abs(x[0]))
@@ -87,9 +87,11 @@ def get_importance_sorted_inputs_lime_like(
         yield i, explanation[i] > 0.0
 
 
-def get_importance_sorted_inputs_len(model, inputs, target, max_minterm_complexity=10):
-    def get_importance_from_fol_string(explanation):
-        def insert_in_binary(x, index, val):
+def get_importance_sorted_inputs_len(
+    model: Module, inputs: Tensor, target: int, max_minterm_complexity: int = 10
+) -> Generator[Tuple[int, bool], None, None]:
+    def get_importance_from_fol_string(explanation: str) -> List[int]:
+        def insert_in_binary(x: int, index: int, val: int) -> int:
             value_before_index = x & ((1 << index) - 1)
             x -= value_before_index
             x = x << 1
@@ -135,8 +137,12 @@ def get_importance_sorted_inputs_len(model, inputs, target, max_minterm_complexi
         yield i, explanation[i] >= 0.0
 
 
-def get_importance_sorted_inputs_len_local(model, inputs, target):
-    def explanation_func(input_tensor, target, max_minterm_complexity):
+def get_importance_sorted_inputs_len_local(
+    model: Module, inputs: Tensor, target: int, max_minterm_complexity: int = 5
+) -> Generator[Tuple[int, bool], None, None]:
+    def explanation_func(
+        input_tensor: Tensor, target: int, max_minterm_complexity: int
+    ) -> str:
         if isinstance(input_tensor, Tuple):
             assert (
                 len(input_tensor) == 1
@@ -157,7 +163,7 @@ def get_importance_sorted_inputs_len_local(model, inputs, target):
         )
         return explanation[0]
 
-    def get_importance_from_fol_string_local(explanation):
+    def get_importance_from_fol_string_local(explanation: str) -> List[int]:
         # the FOL is just a minterm, already sorted by importance
         # We just need to extract the order from the string
         values = np.zeros(inputs.size(-1))
@@ -171,7 +177,9 @@ def get_importance_sorted_inputs_len_local(model, inputs, target):
 
         return values
 
-    explanation = explanation_func(inputs, target, max_minterm_complexity=50)
+    explanation = explanation_func(
+        inputs, target, max_minterm_complexity=max_minterm_complexity
+    )
     explanation = get_importance_from_fol_string_local(explanation)
     exp_idx = [(explanation[i], i) for i in range(len(explanation))]
     exp_idx.sort(key=lambda x: np.abs(x[0]))
