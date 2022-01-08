@@ -312,7 +312,7 @@ def create_and_train_len(
     )
 
     # Adding a Sigmoid layer
-    model.add_module(sum(1 for _ in model.children()), torch.nn.Sigmoid())
+    model.add_module("{}".format(sum(1 for _ in model.children())), torch.nn.Sigmoid())
 
     return model
 
@@ -520,7 +520,7 @@ def train_len_model_with_another_model(
     )
 
     # Adding a Sigmoid layer
-    model.add_module(sum(1 for _ in model.children()), torch.nn.Sigmoid())
+    model.add_module("{}".format(sum(1 for _ in model.children())), torch.nn.Sigmoid())
 
     return model
 
@@ -679,7 +679,7 @@ def run_lime(
     )
 
     # Adding the Sigmoid Layer
-    model.add_module(sum(1 for _ in model.children()), torch.nn.Sigmoid())
+    model.add_module("{}".format(sum(1 for _ in model.children())), torch.nn.Sigmoid())
 
     test_torch_model(model, x_test, y_test)
 
