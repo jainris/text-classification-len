@@ -5,6 +5,7 @@ from torch.nn.modules.loss import BCEWithLogitsLoss
 import torch_explain as te
 import torch
 import scipy
+from tqdm import tqdm
 
 from sklearn import metrics
 from sklearn.dummy import DummyClassifier
@@ -337,17 +338,20 @@ def train_model(
     TODO
     """
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    #     optimizer=optimizer, mode="max", factor=0.1, patience=4, cooldown=5, min_lr=1e-4
-    # )
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer=optimizer, step_size=30, gamma=0.1
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer=optimizer,
+        mode="max",
+        factor=5e-1,
+        patience=15,
+        cooldown=0,
+        verbose=True,
+        threshold=5e-1,
+        threshold_mode="abs",
     )
     model.train()
 
     if loss_func is None:
-        loss_form = torch.nn.BCEWithLogitsLoss()
+        loss_form = BCEWithLogitsLoss()
         loss_func = lambda y_exp, y_act, model, x: loss_form(
             y_exp, y_act
         ) + 1e-4 * te.nn.functional.entropy_logic_loss(model)
@@ -381,69 +385,63 @@ def train_model(
                 validation_dataset, batch_size=batch_size
             )
 
-            last_run_loss = 0.0
-            running_loss = 0.0
-            print("Epoch {}".format(epoch + 1), end="\r")
-            for i, data in enumerate(training_data_generator, 0):
-                x, y = data
-                # if i == 50:
-                #     # Currently only training with limited samples
-                #     break
-                optimizer.zero_grad()
-                y_pred = model(x).squeeze(-1)
-                loss = loss_func(y_pred, y, model, x)
-                loss.backward()
-                optimizer.step()
-                print(
-                    "\rEpoch, Batch: [{}, {}] -- Loss: {}".format(
-                        ep, i + 1, running_loss / (i + 1),
-                    ),
-                    end="",
-                )
+            tot_loss = 0.0
+            with tqdm(
+                training_data_generator,
+                desc="Epoch {}".format(ep),
+                unit="Batch",
+                leave=False,
+            ) as tqdm_data_gen:
+                for i, data in enumerate(tqdm_data_gen, 0):
+                    x, y = data
 
-                running_loss += loss.item()
-                if i % 50 == 49:  # print every 50 batches
-                    print(
-                        "\rEpoch, Batch: [{}, {}] -- Loss: {}".format(
-                            ep, i + 1, running_loss / 50
-                        ),
-                        end="",
+                    optimizer.zero_grad()
+                    y_pred = model(x).squeeze(-1)
+                    loss = loss_func(y_pred, y, model, x)
+                    loss.backward()
+                    optimizer.step()
+
+                    tot_loss += loss.item()
+                    tqdm_data_gen.set_postfix_str(
+                        " Cur Loss: {:7.4f}, Tot Avg Loss: {:7.4f}".format(
+                            loss.item(), tot_loss / (i + 1)
+                        )
                     )
-                    last_run_loss = running_loss
-                    running_loss = 0.0
 
             # Validation loop
             valid_loss = 0.0
             num_val = 0
-            for x, y in validation_data_generator:
-                num_val += 1
+            with tqdm(
+                validation_data_generator,
+                desc="Epoch {}".format(ep),
+                unit="Batch",
+                leave=True,
+            ) as tqdm_data_gen:
+                for x, y in tqdm_data_gen:
+                    num_val += 1
 
-                y_pred = model(x).squeeze(-1)
-                loss = loss_func(y_pred, y, model, x)
+                    y_pred = model(x).squeeze(-1)
+                    loss = loss_func(y_pred, y, model, x)
 
-                y_true = y.cpu().numpy()
+                    y_true = y.cpu().numpy()
 
-                y_pred = model(x).squeeze(-1)
-                y_pred = torch.nn.Sigmoid()(y_pred).detach().cpu().numpy()
+                    y_pred = model(x).squeeze(-1)
+                    y_pred = torch.nn.Sigmoid()(y_pred).detach().cpu().numpy()
 
-                valid_loss += avg_jaccard(y_true, y_pred)
+                    valid_loss += avg_jaccard(y_true, y_pred)
 
-                print(
-                    "\rEpoch: {} -- Last Run Loss: {} -- Validation Score: {}".format(
-                        ep, last_run_loss / 50.0, valid_loss / num_val
-                    ),
-                    end="",
-                )
+                    tqdm_data_gen.set_postfix_str(
+                        " Tot Avg Loss: {:7.4f}, Validation Score: {:7.4f}".format(
+                            tot_loss / (i + 1), valid_loss / num_val
+                        )
+                    )
 
-            print(
-                "\rEpoch: {} -- Last Run Loss: {} -- Validation Score: {}".format(
-                    ep, last_run_loss / 50, valid_loss / num_val
-                )
+            lr = [float(param_group["lr"]) for param_group in optimizer.param_groups]
+
+            history.append(
+                (valid_loss / num_val, lr, tot_loss / len(training_data_generator))
             )
-
-            scheduler.step()
-
-            history.append(valid_loss / num_val)
+            scheduler.step(valid_loss)
 
             if save_the_model and valid_loss > min_valid_loss:
                 print(
