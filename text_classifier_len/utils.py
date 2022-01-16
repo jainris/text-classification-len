@@ -22,25 +22,29 @@ def avg_jaccard(y_true, y_pred):
     return jaccard.mean() * 100
 
 
-def print_score(y_pred, y_true):
-    print(
-        "F-Beta score (Beta = 0.5): {}".format(
-            metrics.fbeta_score(y_true, y_pred, beta=0.5, average="weighted")
-        )
-    )
-    print("F1 score: {}".format(metrics.f1_score(y_true, y_pred, average="weighted")))
-    print("Jaccard score: {}".format(avg_jaccard(y_true, y_pred)))
-    print("Hamming loss: {}".format(metrics.hamming_loss(y_true, y_pred) * 100))
-    print(
-        "Precision score: {}".format(
-            metrics.precision_score(y_true, y_pred, average="weighted")
-        )
-    )
-    print(
-        "Recall score: {}".format(
-            metrics.recall_score(y_true, y_pred, average="weighted")
-        )
-    )
+def get_scores(y_pred, y_true):
+    return [
+        metrics.fbeta_score(y_true, y_pred, beta=0.5, average="weighted"),
+        metrics.f1_score(y_true, y_pred, average="weighted"),
+        avg_jaccard(y_true, y_pred),
+        metrics.hamming_loss(y_true, y_pred) * 100,
+        metrics.precision_score(y_true, y_pred, average="weighted"),
+        metrics.recall_score(y_true, y_pred, average="weighted"),
+    ]
+
+
+def print_score(scores=None, y_pred=None, y_true=None):
+    if scores is None:
+        assert y_pred is not None and y_true is not None
+        scores = get_scores(y_pred=y_pred, y_true=y_true)
+
+    fbeta, f1, jaccard, hamming, precision, recall = scores
+    print("F-Beta score (Beta = 0.5): {}".format(fbeta))
+    print("F1 score: {}".format(f1))
+    print("Jaccard score (%): {}".format(jaccard))
+    print("Hamming loss (%): {}".format(hamming))
+    print("Precision score: {}".format(precision))
+    print("Recall score: {}".format(recall))
     print("---")
 
 

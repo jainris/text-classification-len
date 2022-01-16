@@ -29,7 +29,7 @@ from iterstrat.ml_stratifiers import MultilabelStratifiedKFold
 from text_classifier_len.data_processing import StackSampleDatasetLoader
 from text_classifier_len.data_processing import DatasetProcessing
 from text_classifier_len.data_processing import DataPreparer
-from text_classifier_len.utils import avg_jaccard
+from text_classifier_len.utils import avg_jaccard, get_scores
 from text_classifier_len.utils import print_score
 from text_classifier_len.utils import convert_scipy_csr_to_torch_coo
 from text_classifier_len.utils import get_single_stratified_split
@@ -523,7 +523,7 @@ def train_len_model_with_another_model(
     return model
 
 
-def test_torch_model(model, x_test, y_test, batch_size=128, device="cpu"):
+def test_torch_model(model, x_test, y_test, batch_size=128, device="cpu", print_scores=True):
     """
     Tests a PyTorch Model. Prints the obtained score.
 
@@ -566,7 +566,11 @@ def test_torch_model(model, x_test, y_test, batch_size=128, device="cpu"):
 
     y_preds = np.where(y_preds > 0.5, 1, 0)
 
-    print_score(y_preds, y_true)
+    scores = get_scores(y_preds, y_true)
+    if print_scores:
+        print_score(scores=scores)
+
+    return scores
 
 
 def get_len_explanation(
