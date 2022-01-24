@@ -153,7 +153,14 @@ def get_learning_curves(history, epoch_limit=None):
 
 
 def local_explanation(
-    model, x, target_class, module=None, feature_names=None, max_minterm_complexity=50
+    model,
+    x,
+    target_class,
+    module=None,
+    feature_names=None,
+    max_minterm_complexity=50,
+    simplify=False,
+    improve=False,
 ):
     if module is None:
         for mod in model.children():
@@ -179,7 +186,7 @@ def local_explanation(
     # look at the "positive" rows of the truth table only
     positive_samples = torch.nonzero(y_correct)
     for positive_sample in positive_samples:
-        _, local_explanation_raw = _local_explanation(
+        local_explanation, local_explanation_raw = _local_explanation(
             module,
             feature_names,
             positive_sample,
@@ -189,9 +196,69 @@ def local_explanation(
             target_class=target_class,
             max_accuracy=False,
             max_minterm_complexity=max_minterm_complexity,
-            simplify=False,
+            simplify=simplify,
         )
 
-        local_explanations.append(local_explanation_raw)
+        good, bad = None, None
+
+        if improve:
+            good, bad = get_the_good_and_bad_terms(
+                model=model,
+                input_tensor=x[positive_sample],
+                explanation=local_explanation_raw,
+                target=target_class,
+                concept_names=feature_names,
+            )
+            good, bad = " & ".join(good), " & ".join(bad)
+
+        local_explanations.append((local_explanation, local_explanation_raw, good, bad))
 
     return local_explanations
+
+
+def get_the_good_and_bad_terms(
+    model, input_tensor, explanation, target, concept_names=None
+):
+    def perturb_inputs_rem(inputs, target):
+        inputs[:, target] = 0.0
+        return inputs
+
+    def perturb_inputs_add(inputs, target):
+        # inputs[:, target] += inputs.sum(axis=1) / (inputs != 0).sum(axis=1)
+        inputs[:, target] += inputs.max(axis=1)[0]
+        # inputs[:, target] += 1
+        return inputs
+
+    input_tensor = input_tensor.view(1, -1)
+    explanation = explanation.split(" & ")
+
+    good, bad = [], []
+
+    base = model(input_tensor).view(-1)
+    base = base[target]
+
+    for term in explanation:
+        atom = term
+        remove = True
+        if atom[0] == "~":
+            remove = False
+            atom = atom[1:]
+
+        if concept_names is not None:
+            idx = concept_names.index(atom)
+        else:
+            idx = int(atom[len("feature") :])
+        temp_tensor = input_tensor.clone().detach()
+        temp_tensor = (
+            perturb_inputs_rem(temp_tensor, idx)
+            if remove
+            else perturb_inputs_add(temp_tensor, idx)
+        )
+        new_pred = model(temp_tensor).view(-1)
+        new_pred = new_pred[target]
+        if new_pred >= base:
+            bad.append(term)
+        else:
+            good.append(term)
+        del temp_tensor
+    return good, bad

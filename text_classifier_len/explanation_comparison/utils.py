@@ -154,13 +154,13 @@ def get_importance_sorted_inputs_len_local(
             ), "Currently only support one perturbed input at a time"
 
         concept_names = ["f{}".format(i) for i in range(input_tensor.size(-1))]
-        explanation = local_explanation(
+        _, explanation, _, _ = local_explanation(
             model,
             input_tensor,
             target_class=target,
             feature_names=concept_names,
             max_minterm_complexity=max_minterm_complexity,
-        )
+        )[0]
         return explanation[0]
 
     def get_importance_from_fol_string_local(explanation: str) -> List[int]:
