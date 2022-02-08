@@ -329,6 +329,7 @@ def train_model(
     save_the_model=False,
     model_path=None,
     loss_func=None,
+    n_splits=10,
     learning_rate_scheduler_params=None,
 ):
     """
@@ -367,36 +368,33 @@ def train_model(
         loss_func = lambda y_exp, y_act, model, x: loss_form(
             y_exp, y_act
         ) + 1e-4 * te.nn.functional.entropy_logic_loss(model)
-    history = []
+    tot_history = []
 
-    n_splits = 5
     kf = MultilabelStratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
 
-    min_valid_loss = -np.inf
+    for cv_i, (train_idx, val_idx) in enumerate(kf.split(x_train, y_train)):
+        history = []
 
-    ep = 0
+        min_valid_loss = -np.inf
 
-    for epoch in range(num_epochs // n_splits):
-        for train_idx, val_idx in kf.split(x_train, y_train):
-            ep += 1
-            training_dataset = SparseToDenseDataset(
-                convert_scipy_csr_to_torch_coo(x_train[train_idx]),
-                torch.FloatTensor(y_train[train_idx]),
-                device,
-            )
-            training_data_generator = torch.utils.data.DataLoader(
-                training_dataset, batch_size=batch_size
-            )
+        training_dataset = SparseToDenseDataset(
+            convert_scipy_csr_to_torch_coo(x_train[train_idx]),
+            torch.FloatTensor(y_train[train_idx]),
+            device,
+        )
+        training_data_generator = torch.utils.data.DataLoader(
+            training_dataset, batch_size=batch_size
+        )
 
-            validation_dataset = SparseToDenseDataset(
-                convert_scipy_csr_to_torch_coo(x_train[val_idx]),
-                torch.FloatTensor(y_train[val_idx]),
-                device,
-            )
-            validation_data_generator = torch.utils.data.DataLoader(
-                validation_dataset, batch_size=batch_size
-            )
-
+        validation_dataset = SparseToDenseDataset(
+            convert_scipy_csr_to_torch_coo(x_train[val_idx]),
+            torch.FloatTensor(y_train[val_idx]),
+            device,
+        )
+        validation_data_generator = torch.utils.data.DataLoader(
+            validation_dataset, batch_size=batch_size
+        )
+        for ep in range(num_epochs):
             tot_loss = 0.0
             with tqdm(
                 training_data_generator,
@@ -463,9 +461,10 @@ def train_model(
                 )
                 min_valid_loss = valid_loss
 
-                torch.save(model.state_dict(), model_path)
+                torch.save(model.state_dict(), "{}_{}".format(model_path, cv_i))
+        tot_history.append(history)
 
-    return model, history
+    return model, tot_history
 
 
 def train_len_model_with_another_model(
