@@ -329,6 +329,7 @@ def train_model(
     save_the_model=False,
     model_path=None,
     loss_func=None,
+    learning_rate_scheduler_params=None,
 ):
     """
     Trains a PyTorch Model.
@@ -338,15 +339,26 @@ def train_model(
     TODO
     """
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+
+    if learning_rate_scheduler_params is None:
+        learning_rate_scheduler_params = {
+            "optimizer": optimizer,
+            "mode": "max",
+            "factor": 5e-1,
+            "patience": 15,
+            "cooldown": 0,
+            "verbose": True,
+            "threshold": 5e-1,
+            "threshold_mode": "abs",
+        }
+    else:
+        if "optimizer" not in learning_rate_scheduler_params:
+            learning_rate_scheduler_params["optimizer"] = optimizer
+        if "mode" not in learning_rate_scheduler_params:
+            learning_rate_scheduler_params["mode"] = "max"
+
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer=optimizer,
-        mode="max",
-        factor=5e-1,
-        patience=15,
-        cooldown=0,
-        verbose=True,
-        threshold=5e-1,
-        threshold_mode="abs",
+        **learning_rate_scheduler_params
     )
     model.train()
 
@@ -523,7 +535,9 @@ def train_len_model_with_another_model(
     return model
 
 
-def test_torch_model(model, x_test, y_test, batch_size=128, device="cpu", print_scores=True):
+def test_torch_model(
+    model, x_test, y_test, batch_size=128, device="cpu", print_scores=True
+):
     """
     Tests a PyTorch Model. Prints the obtained score.
 

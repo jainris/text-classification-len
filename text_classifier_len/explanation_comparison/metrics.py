@@ -84,7 +84,9 @@ def calculate_max_sensitivity_len(
             max_minterm_complexity=max_minterm_complexity,
         )
 
-        _, sensitivities, _ = calculate_distance(expl_perturbed_inputs, expl_inputs)
+        _, sensitivities, possibilities_pert = calculate_distance(
+            expl_perturbed_inputs, expl_inputs
+        )
 
         # compute the norm/distance for each input noisy example
         sensitivities_norm = sensitivities / expl_inputs_norm
@@ -102,7 +104,7 @@ def calculate_max_sensitivity_len(
         )
 
         # compute the norm/distance of original input explanations
-        _, expl_inputs_norm, _ = calculate_distance(expl_inputs)
+        _, expl_inputs_norm, possibilities = calculate_distance(expl_inputs)
 
         if expl_inputs_norm == 0:
             print("Warning!!! Couldn't find an explanation for the given input")
@@ -115,8 +117,14 @@ def calculate_max_sensitivity_len(
 
 
 def auc_morf(model, inputs, target, get_importance_sorted_inputs):
-    def perturb_inputs(inputs, target, remove=True):
-        inputs[:, target] = 0.0 if remove else 1.0
+    def perturb_inputs_rem(inputs, target):
+        inputs[:, target] = 0.0
+        return inputs
+
+    def perturb_inputs_add(inputs, target):
+        # inputs[:, target] += inputs.sum(axis=1) / (inputs != 0).sum(axis=1)
+        inputs[:, target] += inputs.max(axis=1)[0]
+        # inputs[:, target] += 1
         return inputs
 
     def get_prediction(model, x, target):
@@ -140,11 +148,13 @@ def auc_morf(model, inputs, target, get_importance_sorted_inputs):
 
     importance_sorted_inputs = get_importance_sorted_inputs(model, inputs, target)
     i, remove = next(importance_sorted_inputs)
-    inputs = perturb_inputs(inputs, i, remove)
+    inputs = perturb_inputs_rem(inputs, i) if remove else perturb_inputs_add(inputs, i)
     y_prev, _ = get_prediction(model, inputs, target)
 
     for i, remove in importance_sorted_inputs:
-        inputs = perturb_inputs(inputs, i, remove)
+        inputs = (
+            perturb_inputs_rem(inputs, i) if remove else perturb_inputs_add(inputs, i)
+        )
         y_cur, _ = get_prediction(model, inputs, target)
         auc_morf += normalize_input((y_prev + y_cur) / 2)
         y_prev = y_cur
@@ -172,4 +182,4 @@ def calculate_avg_auc_morf(model, inputs, get_importance_sorted_inputs):
                 )
 
             auc_morfs.append(batch_auc_morfs)
-    return np.mean(auc_morfs), auc_morfs
+    return np.mean([ele for auc in auc_morfs for ele in auc]), auc_morfs

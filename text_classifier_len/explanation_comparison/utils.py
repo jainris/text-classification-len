@@ -161,7 +161,7 @@ def get_importance_sorted_inputs_len_local(
             feature_names=concept_names,
             max_minterm_complexity=max_minterm_complexity,
         )[0]
-        return explanation[0]
+        return explanation
 
     def get_importance_from_fol_string_local(explanation: str) -> List[int]:
         # the FOL is just a minterm, already sorted by importance
@@ -186,3 +186,59 @@ def get_importance_sorted_inputs_len_local(
 
     for _, i in reversed(exp_idx):
         yield i, explanation[i] >= 0.0
+
+
+def get_importance_sorted_inputs_len_local_2(
+    model: Module, inputs: Tensor, target: int, max_minterm_complexity: int = 5
+) -> Generator[Tuple[int, bool], None, None]:
+    def explanation_func(
+        input_tensor: Tensor, target: int, max_minterm_complexity: int
+    ) -> str:
+        if isinstance(input_tensor, Tuple):
+            assert (
+                len(input_tensor) == 1
+            ), "Currently only support one perturbed input at a time"
+            input_tensor = input_tensor[0]
+        if input_tensor.ndim == 2:
+            assert (
+                input_tensor.size(0) == 1
+            ), "Currently only support one perturbed input at a time"
+
+        concept_names = ["f{}".format(i) for i in range(input_tensor.size(-1))]
+        _, _, good, bad = local_explanation(
+            model,
+            input_tensor,
+            target_class=target,
+            feature_names=concept_names,
+            max_minterm_complexity=max_minterm_complexity,
+            improve=True,
+        )[0]
+        return good, bad
+
+    def get_importance_from_fol_string_local(good: str, bad: str) -> List[int]:
+        # the FOL is just a minterm, already sorted by importance
+        # We just need to extract the order from the string
+        values = np.zeros((inputs.size(-1), 2))
+
+        for sign, explanation_string in enumerate([bad, good]):
+            if len(explanation_string) == 0:
+                continue
+            sign = 2 * sign - 1
+            symbols = explanation_string.split(" & ")
+            for i, sym in enumerate(symbols):
+                value = len(symbols) - i
+                val_idx = int(str(sym.split("~")[-1])[1:])
+                values[val_idx, 0] = sign * value
+                values[val_idx, 1] = -1.0 if sym[0] == "~" else 1.0
+
+        return values
+
+    good, bad = explanation_func(
+        inputs, target, max_minterm_complexity=max_minterm_complexity
+    )
+    explanation = get_importance_from_fol_string_local(good, bad)
+    exp_idx = [(explanation[i], i) for i in range(len(explanation))]
+    exp_idx.sort(key=lambda x: x[0][0])
+
+    for _, i in reversed(exp_idx):
+        yield i, explanation[i][1] >= 0.0
