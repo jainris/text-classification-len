@@ -336,6 +336,7 @@ def train_model(
     n_cv_iters=None,
     history_file_path=None,
     weight_reset_module_list=[te.nn.logic.EntropyLinear, torch.nn.Linear],
+    optimizer_params=dict(),
 ):
     """
     Trains a PyTorch Model.
@@ -377,7 +378,7 @@ def train_model(
 
         model.apply(weight_reset_func)
 
-        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, **optimizer_params)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             **learning_rate_scheduler_params, optimizer=optimizer,
         )
