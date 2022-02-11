@@ -262,3 +262,8 @@ def get_the_good_and_bad_terms(
             good.append(term)
         del temp_tensor
     return good, bad
+
+
+def weight_reset(module, module_list):
+    if type(module) in module_list:
+        module.reset_parameters()

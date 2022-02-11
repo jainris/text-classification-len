@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
-from torch import optim
-from torch.nn.modules.loss import BCEWithLogitsLoss
 import torch_explain as te
 import torch
 import scipy
+import pickle
+
+from torch.nn.modules.loss import BCEWithLogitsLoss
 from tqdm import tqdm
 
 from sklearn import metrics
@@ -33,6 +34,7 @@ from text_classifier_len.utils import avg_jaccard, get_scores
 from text_classifier_len.utils import print_score
 from text_classifier_len.utils import convert_scipy_csr_to_torch_coo
 from text_classifier_len.utils import get_single_stratified_split
+from text_classifier_len.utils import weight_reset
 
 seed = 0
 
@@ -331,6 +333,9 @@ def train_model(
     loss_func=None,
     n_splits=10,
     learning_rate_scheduler_params=None,
+    n_cv_iters=None,
+    history_file_path=None,
+    weight_reset_module_list=[te.nn.logic.EntropyLinear, torch.nn.Linear],
 ):
     """
     Trains a PyTorch Model.
@@ -339,11 +344,8 @@ def train_model(
     ----------
     TODO
     """
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
-
     if learning_rate_scheduler_params is None:
         learning_rate_scheduler_params = {
-            "optimizer": optimizer,
             "mode": "max",
             "factor": 5e-1,
             "patience": 15,
@@ -352,15 +354,10 @@ def train_model(
             "threshold": 5e-1,
             "threshold_mode": "abs",
         }
-    else:
-        if "optimizer" not in learning_rate_scheduler_params:
-            learning_rate_scheduler_params["optimizer"] = optimizer
-        if "mode" not in learning_rate_scheduler_params:
-            learning_rate_scheduler_params["mode"] = "max"
+    elif "mode" not in learning_rate_scheduler_params:
+        learning_rate_scheduler_params["mode"] = "max"
+    n_cv_iters = n_splits if n_cv_iters is None else n_cv_iters
 
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        **learning_rate_scheduler_params
-    )
     model.train()
 
     if loss_func is None:
@@ -372,7 +369,19 @@ def train_model(
 
     kf = MultilabelStratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
 
+    weight_reset_func = lambda module: weight_reset(module, weight_reset_module_list)
+
     for cv_i, (train_idx, val_idx) in enumerate(kf.split(x_train, y_train)):
+        if cv_i >= n_cv_iters:
+            return model, tot_history
+
+        model.apply(weight_reset_func)
+
+        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            **learning_rate_scheduler_params, optimizer=optimizer,
+        )
+
         history = []
 
         min_valid_loss = -np.inf
@@ -463,6 +472,10 @@ def train_model(
 
                 torch.save(model.state_dict(), "{}_{}".format(model_path, cv_i))
         tot_history.append(history)
+
+        if history_file_path is not None:
+            with open(history_file_path, "wb") as f:
+                pickle.dump(tot_history, f)
 
     return model, tot_history
 
