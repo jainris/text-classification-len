@@ -56,7 +56,7 @@ def calculate_max_sensitivity_len(
         The perturbations are generated for each example
         `current_n_perturb_samples` times.
 
-        For perfomance reasons we are not calling `perturb_func` on each example but
+        For performance reasons we are not calling `perturb_func` on each example but
         on a batch that contains `current_n_perturb_samples` repeated instances
         per example.
         """
@@ -123,7 +123,7 @@ def auc_morf(model, inputs, target, get_importance_sorted_inputs):
 
     def perturb_inputs_add(inputs, target):
         # inputs[:, target] += inputs.sum(axis=1) / (inputs != 0).sum(axis=1)
-        inputs[:, target] += inputs.max(axis=1)[0]
+        inputs[:, target] = inputs.max(axis=1)[0]
         # inputs[:, target] += 1
         return inputs
 
@@ -151,6 +151,8 @@ def auc_morf(model, inputs, target, get_importance_sorted_inputs):
     inputs = perturb_inputs_rem(inputs, i) if remove else perturb_inputs_add(inputs, i)
     y_prev, _ = get_prediction(model, inputs, target)
 
+    num_perturbs = 0
+
     for i, remove in importance_sorted_inputs:
         inputs = (
             perturb_inputs_rem(inputs, i) if remove else perturb_inputs_add(inputs, i)
@@ -158,8 +160,12 @@ def auc_morf(model, inputs, target, get_importance_sorted_inputs):
         y_cur, _ = get_prediction(model, inputs, target)
         auc_morf += normalize_input((y_prev + y_cur) / 2)
         y_prev = y_cur
+        num_perturbs += 1
 
-    return auc_morf
+    if num_perturbs == 0:
+        num_perturbs += 1
+
+    return auc_morf / num_perturbs
 
 
 def calculate_avg_auc_morf(model, inputs, get_importance_sorted_inputs):
@@ -183,3 +189,69 @@ def calculate_avg_auc_morf(model, inputs, get_importance_sorted_inputs):
 
             auc_morfs.append(batch_auc_morfs)
     return np.mean([ele for auc in auc_morfs for ele in auc]), auc_morfs
+
+
+def aoc_morf(model, inputs, target, get_importance_sorted_inputs):
+    def perturb_inputs_rem(inputs, target):
+        inputs[:, target] = 0.0
+        return inputs
+
+    def perturb_inputs_add(inputs, target):
+        # inputs[:, target] += inputs.sum(axis=1) / (inputs != 0).sum(axis=1)
+        inputs[:, target] += inputs.max(axis=1)[0]
+        # inputs[:, target] += 1
+        return inputs
+
+    def get_prediction(model, x, target):
+        y_preds = model(x)
+        batch_size = y_preds.size(0)
+        y_preds = y_preds.view(batch_size, -1)
+        y_preds = y_preds[:, target]
+        return y_preds, batch_size
+
+    def normalize_input(inputs):
+        if isinstance(inputs, torch.Tensor):
+            inputs = inputs.view(-1)
+            return inputs.sum() / inputs.size(0)
+        else:
+            return inputs
+
+    base = normalize_input(model(inputs))
+    inputs = inputs.clone()
+    if inputs.ndim < 2:
+        inputs = inputs.view(1, -1)
+    aoc_morf_val = 0.0
+
+    importance_sorted_inputs = get_importance_sorted_inputs(model, inputs, target)
+
+    for i, remove in importance_sorted_inputs:
+        inputs = (
+            perturb_inputs_rem(inputs, i) if remove else perturb_inputs_add(inputs, i)
+        )
+        y_cur, _ = get_prediction(model, inputs, target)
+        aoc_morf_val += base - normalize_input(y_cur)
+
+    return aoc_morf_val / (inputs.size(-1) + 1)
+
+
+def calculate_avg_aoc_morf(model, inputs, get_importance_sorted_inputs):
+    with torch.no_grad():
+        aoc_morfs = []
+        if inputs.ndim == 1:
+            inputs = inputs.view(1, -1)
+        batch_size = inputs.size(0)
+
+        for b in range(batch_size):
+            batch_aoc_morfs = []
+            x = inputs[b]
+            y = model(x).view(-1) >= 0.5
+
+            targets = torch.nonzero(y)
+
+            for target in targets:
+                batch_aoc_morfs.append(
+                    aoc_morf(model, x, int(target), get_importance_sorted_inputs)
+                )
+
+            aoc_morfs.append(batch_aoc_morfs)
+    return np.mean([ele for auc in aoc_morfs for ele in auc]), aoc_morfs

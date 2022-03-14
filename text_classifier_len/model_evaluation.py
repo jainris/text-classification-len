@@ -240,7 +240,7 @@ def run_basic_models(questions_path, tag_path):
 
     CV_svc = GridSearchCV(
         estimator=OneVsRestClassifier(LinearSVC()),
-        param_grid={"estimator__C": [1, 10, 100, 1000]},
+        param_grid={"estimator__C": [0.1, 1, 10, 100], "estimator__dual": [True, False]},
         cv=5,
         verbose=10,
         scoring=metrics.make_scorer(avg_jaccard, greater_is_better=True),
@@ -289,9 +289,9 @@ def create_and_train_len(
     device = torch.device("cuda:0" if use_cuda and torch.cuda.is_available() else "cpu")
 
     layers = [
-        te.nn.EntropyLinear(x_train.shape[1], 10, n_classes=y_train.shape[1]),
+        te.nn.EntropyLinear(x_train.shape[1], 8, n_classes=y_train.shape[1]),
         torch.nn.LeakyReLU(),
-        torch.nn.Linear(10, 4),
+        torch.nn.Linear(8, 4),
         torch.nn.LeakyReLU(),
         torch.nn.Linear(4, 1),
     ]
@@ -378,7 +378,9 @@ def train_model(
 
         model.apply(weight_reset_func)
 
-        optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, **optimizer_params)
+        optimizer = torch.optim.SGD(
+            model.parameters(), lr=learning_rate, **optimizer_params
+        )
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             **learning_rate_scheduler_params, optimizer=optimizer,
         )
@@ -439,10 +441,6 @@ def train_model(
             ) as tqdm_data_gen:
                 for x, y in tqdm_data_gen:
                     num_val += 1
-
-                    y_pred = model(x).squeeze(-1)
-                    loss = loss_func(y_pred, y, model, x)
-
                     y_true = y.cpu().numpy()
 
                     y_pred = model(x).squeeze(-1)
@@ -481,17 +479,194 @@ def train_model(
     return model, tot_history
 
 
-def train_len_model_with_another_model(
-    reference_model,
+def train_model_without_dataloader(
+    model,
     x_train,
     y_train,
+    device,
     batch_size=128,
     learning_rate=5e-3,
     num_epochs=10,
     save_the_model=False,
     model_path=None,
-    use_cuda=True,
-    load_model=False,
+    loss_func=None,
+    n_splits=10,
+    learning_rate_scheduler_params=None,
+    n_cv_iters=None,
+    history_file_path=None,
+    weight_reset_module_list=[te.nn.logic.EntropyLinear, torch.nn.Linear],
+    optimizer_params=dict(),
+):
+    """
+    Trains a PyTorch Model.
+
+    Parameters
+    ----------
+    TODO
+    """
+    if learning_rate_scheduler_params is None:
+        learning_rate_scheduler_params = {
+            "mode": "max",
+            "factor": 5e-1,
+            "patience": 15,
+            "cooldown": 0,
+            "verbose": True,
+            "threshold": 5e-1,
+            "threshold_mode": "abs",
+        }
+    elif "mode" not in learning_rate_scheduler_params:
+        learning_rate_scheduler_params["mode"] = "max"
+    n_cv_iters = n_splits if n_cv_iters is None else n_cv_iters
+
+    model.train()
+
+    if loss_func is None:
+        loss_form = BCEWithLogitsLoss()
+        loss_func = lambda y_exp, y_act, model, x: loss_form(
+            y_exp, y_act
+        ) + 1e-4 * te.nn.functional.entropy_logic_loss(model)
+    tot_history = []
+
+    kf = MultilabelStratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+
+    weight_reset_func = lambda module: weight_reset(module, weight_reset_module_list)
+
+    for cv_i, (train_idx, val_idx) in enumerate(kf.split(x_train, y_train)):
+        if cv_i >= n_cv_iters:
+            break
+
+        model.apply(weight_reset_func)
+
+        optimizer = torch.optim.SGD(
+            model.parameters(), lr=learning_rate, **optimizer_params
+        )
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            **learning_rate_scheduler_params, optimizer=optimizer,
+        )
+
+        history = []
+
+        min_valid_loss = -np.inf
+
+        xs = x_train[train_idx]
+        ys = y_train[train_idx]
+
+        validation_x = x_train[val_idx]
+        validation_y = y_train[val_idx]
+
+        for ep in range(num_epochs):
+            idx = np.arange(xs.shape[0])
+            np.random.shuffle(idx)
+            training_x = xs[idx]
+            training_y = torch.FloatTensor(ys[idx]).to(device)
+            tot_loss = 0.0
+            with tqdm(
+                range(training_x.shape[0] // batch_size),
+                desc="Epoch {}".format(ep),
+                unit="Batch",
+                # leave=False,
+            ) as tqdm_data_gen:
+                for i in tqdm_data_gen:
+                    x = (
+                        convert_scipy_csr_to_torch_coo(
+                            training_x[batch_size * i : batch_size * (i + 1)]
+                        )
+                        .to_dense()
+                        .to(device)
+                    )
+                    y = training_y[batch_size * i : batch_size * (i + 1)]
+
+                    optimizer.zero_grad()
+                    y_pred = model(x).squeeze(-1)
+                    loss = loss_func(y_pred, y, model, x)
+                    loss.backward()
+                    optimizer.step()
+
+                    tot_loss += loss.item()
+                    tqdm_data_gen.set_postfix_str(
+                        " Cur Loss: {:7.4f}, Tot Avg Loss: {:7.4f}".format(
+                            loss.item(), tot_loss / (i + 1)
+                        )
+                    )
+
+            # Validation loop
+            num_loss = i + 1
+            valid_loss = 0.0
+            num_val = 0
+            with tqdm(
+                range((validation_x.shape[0] - 1) // batch_size + 1),
+                desc="Epoch {}".format(ep),
+                unit="Batch",
+                leave=True,
+            ) as tqdm_data_gen:
+                for i in tqdm_data_gen:
+                    x = (
+                        convert_scipy_csr_to_torch_coo(
+                            validation_x[batch_size * i : batch_size * (i + 1)]
+                        )
+                        .to_dense()
+                        .to(device)
+                    )
+                    y_true = validation_y[batch_size * i : batch_size * (i + 1)]
+
+                    num_val += 1
+                    y_pred = model(x).squeeze(-1)
+                    y_pred = torch.nn.Sigmoid()(y_pred).detach().cpu().numpy()
+
+                    valid_loss += avg_jaccard(y_true, y_pred)
+
+                    tqdm_data_gen.set_postfix_str(
+                        " Tot Avg Loss: {:7.4f}, Validation Score: {:7.4f}".format(
+                            tot_loss / num_loss, valid_loss / num_val
+                        )
+                    )
+
+            lr = [float(param_group["lr"]) for param_group in optimizer.param_groups]
+
+            history.append(
+                (
+                    valid_loss / num_val,
+                    lr,
+                    tot_loss / (training_x.shape[0] // batch_size) / batch_size,
+                )
+            )
+            scheduler.step(valid_loss)
+
+            if save_the_model and valid_loss > min_valid_loss:
+                print(
+                    "Validation score increased!!! ({} -> {})   Saving the model".format(
+                        min_valid_loss / num_val, valid_loss / num_val
+                    )
+                )
+                min_valid_loss = valid_loss
+
+                torch.save(model.state_dict(), "{}_{}".format(model_path, cv_i))
+        tot_history.append(history)
+
+        if history_file_path is not None:
+            with open(history_file_path, "wb") as f:
+                pickle.dump(tot_history, f)
+    return model, tot_history
+
+
+def train_len_model_with_another_model(
+    reference_model,
+    model,
+    x_train,
+    y_train,
+    device,
+    batch_size=128,
+    learning_rate=5e-3,
+    num_epochs=10,
+    save_the_model=False,
+    model_path=None,
+    loss_func=None,
+    n_splits=10,
+    learning_rate_scheduler_params=None,
+    n_cv_iters=None,
+    history_file_path=None,
+    weight_reset_module_list=[te.nn.logic.EntropyLinear, torch.nn.Linear],
+    optimizer_params=dict(),
 ):
     """
     Creates a model with a Linear Entropy Layer from Logic Explained Networks
@@ -501,51 +676,148 @@ def train_len_model_with_another_model(
     ----------
     TODO
     """
-    device = torch.device("cuda:0" if use_cuda and torch.cuda.is_available() else "cpu")
+    if learning_rate_scheduler_params is None:
+        learning_rate_scheduler_params = {
+            "mode": "max",
+            "factor": 5e-1,
+            "patience": 15,
+            "cooldown": 0,
+            "verbose": True,
+            "threshold": 5e-1,
+            "threshold_mode": "abs",
+        }
+    elif "mode" not in learning_rate_scheduler_params:
+        learning_rate_scheduler_params["mode"] = "max"
+    n_cv_iters = n_splits if n_cv_iters is None else n_cv_iters
 
-    layers = [
-        te.nn.EntropyLinear(x_train.shape[1], 10, n_classes=y_train.shape[1]),
-        torch.nn.LeakyReLU(),
-        torch.nn.Linear(10, 4),
-        torch.nn.LeakyReLU(),
-        torch.nn.Linear(4, 1),
-    ]
-    model = torch.nn.Sequential(*layers)
+    model.train()
 
-    if load_model:
-        model.load_state_dict(torch.load(model_path))
+    if loss_func is None:
+        loss_form = BCEWithLogitsLoss()
+        loss_func = lambda y_exp, y_act, model, x: loss_form(
+            y_exp, y_act
+        ) + 1e-4 * te.nn.functional.entropy_logic_loss(model)
+    tot_history = []
 
-    model.to(device=device)
+    kf = MultilabelStratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
 
-    # Setting the loss_function to actually reflect the difference in the
-    # LEN model and the given reference model
-    loss_form = torch.nn.BCEWithLogitsLoss()
+    weight_reset_func = lambda module: weight_reset(module, weight_reset_module_list)
 
-    def loss_func(y_exp, y_act, model, x):
-        # Ignoring the given y_exp
-        # Instead calculating using the reference model
-        y_exp = reference_model(x)
-        return loss_form(y_exp, y_act) + 1e-4 * te.nn.functional.entropy_logic_loss(
-            model
+    for cv_i, (train_idx, val_idx) in enumerate(kf.split(x_train, y_train)):
+        if cv_i >= n_cv_iters:
+            break
+
+        model.apply(weight_reset_func)
+
+        optimizer = torch.optim.SGD(
+            model.parameters(), lr=learning_rate, **optimizer_params
+        )
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            **learning_rate_scheduler_params, optimizer=optimizer,
         )
 
-    model, _ = train_model(
-        model=model,
-        x_train=x_train,
-        y_train=y_train,
-        device=device,
-        batch_size=batch_size,
-        learning_rate=learning_rate,
-        num_epochs=num_epochs,
-        save_the_model=save_the_model,
-        model_path=model_path,
-        loss_func=loss_func,
-    )
+        history = []
 
-    # Adding a Sigmoid layer
-    model.add_module("{}".format(sum(1 for _ in model.children())), torch.nn.Sigmoid())
+        min_valid_loss = -np.inf
 
-    return model
+        xs = x_train[train_idx]
+
+        validation_x = x_train[val_idx]
+
+        for ep in range(num_epochs):
+            idx = np.arange(xs.shape[0])
+            np.random.shuffle(idx)
+            training_x = xs[idx]
+            tot_loss = 0.0
+            with tqdm(
+                range(training_x.shape[0] // batch_size),
+                desc="Epoch {}".format(ep),
+                unit="Batch",
+                # leave=False,
+            ) as tqdm_data_gen:
+                for i in tqdm_data_gen:
+                    x = (
+                        convert_scipy_csr_to_torch_coo(
+                            training_x[batch_size * i : batch_size * (i + 1)]
+                        )
+                        .to_dense()
+                        .to(device)
+                    )
+
+                    optimizer.zero_grad()
+                    y_pred = model(x).squeeze(-1)
+                    y = reference_model(x).view(y_pred.size())
+                    loss = loss_func(y_pred, y, model, x)
+                    loss.backward()
+                    optimizer.step()
+
+                    tot_loss += loss.item()
+                    tqdm_data_gen.set_postfix_str(
+                        " Cur Loss: {:7.4f}, Tot Avg Loss: {:7.4f}".format(
+                            loss.item(), tot_loss / (i + 1)
+                        )
+                    )
+
+            # Validation loop
+            num_loss = i + 1
+            valid_loss = 0.0
+            num_val = 0
+            with tqdm(
+                range((validation_x.shape[0] - 1) // batch_size + 1),
+                desc="Epoch {}".format(ep),
+                unit="Batch",
+                leave=True,
+            ) as tqdm_data_gen:
+                for i in tqdm_data_gen:
+                    x = (
+                        convert_scipy_csr_to_torch_coo(
+                            validation_x[batch_size * i : batch_size * (i + 1)]
+                        )
+                        .to_dense()
+                        .to(device)
+                    )
+
+                    num_val += 1
+                    y_pred = model(x).squeeze(-1)
+                    y_true = (
+                        reference_model(x).view(y_pred.size()).detach().cpu().numpy()
+                    )
+                    y_pred = torch.nn.Sigmoid()(y_pred).detach().cpu().numpy()
+
+                    valid_loss += avg_jaccard(y_true, y_pred)
+
+                    tqdm_data_gen.set_postfix_str(
+                        " Tot Avg Loss: {:7.4f}, Validation Score: {:7.4f}".format(
+                            tot_loss / num_loss, valid_loss / num_val
+                        )
+                    )
+
+            lr = [float(param_group["lr"]) for param_group in optimizer.param_groups]
+
+            history.append(
+                (
+                    valid_loss / num_val,
+                    lr,
+                    tot_loss / (training_x.shape[0] // batch_size) / batch_size,
+                )
+            )
+            scheduler.step(valid_loss)
+
+            if save_the_model and valid_loss > min_valid_loss:
+                print(
+                    "Validation score increased!!! ({} -> {})   Saving the model".format(
+                        min_valid_loss / num_val, valid_loss / num_val
+                    )
+                )
+                min_valid_loss = valid_loss
+
+                torch.save(model.state_dict(), "{}_{}".format(model_path, cv_i))
+        tot_history.append(history)
+
+        if history_file_path is not None:
+            with open(history_file_path, "wb") as f:
+                pickle.dump(tot_history, f)
+    return model, tot_history
 
 
 def test_torch_model(

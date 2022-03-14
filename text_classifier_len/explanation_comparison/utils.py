@@ -189,10 +189,17 @@ def get_importance_sorted_inputs_len_local(
 
 
 def get_importance_sorted_inputs_len_local_2(
-    model: Module, inputs: Tensor, target: int, max_minterm_complexity: int = 5
+    model: Module,
+    inputs: Tensor,
+    target: int,
+    max_minterm_complexity: int = 5,
+    ignore_improb: bool = True,
 ) -> Generator[Tuple[int, bool], None, None]:
     def explanation_func(
-        input_tensor: Tensor, target: int, max_minterm_complexity: int
+        input_tensor: Tensor,
+        target: int,
+        max_minterm_complexity: int,
+        ignore_improb: bool = True,
     ) -> str:
         if isinstance(input_tensor, Tuple):
             assert (
@@ -212,6 +219,7 @@ def get_importance_sorted_inputs_len_local_2(
             feature_names=concept_names,
             max_minterm_complexity=max_minterm_complexity,
             improve=True,
+            ignore_improb=ignore_improb,
         )[0]
         return good, bad
 
@@ -229,12 +237,15 @@ def get_importance_sorted_inputs_len_local_2(
                 value = len(symbols) - i
                 val_idx = int(str(sym.split("~")[-1])[1:])
                 values[val_idx, 0] = sign * value
-                values[val_idx, 1] = -1.0 if sym[0] == "~" else 1.0
+                values[val_idx, 1] = sign * (-1.0 if sym[0] == "~" else 1.0)
 
         return values
 
     good, bad = explanation_func(
-        inputs, target, max_minterm_complexity=max_minterm_complexity
+        inputs,
+        target,
+        max_minterm_complexity=max_minterm_complexity,
+        ignore_improb=ignore_improb,
     )
     explanation = get_importance_from_fol_string_local(good, bad)
     exp_idx = [(explanation[i], i) for i in range(len(explanation))]

@@ -161,6 +161,7 @@ def local_explanation(
     max_minterm_complexity=50,
     simplify=False,
     improve=False,
+    ignore_improb=True,
 ):
     if module is None:
         for mod in model.children():
@@ -178,7 +179,10 @@ def local_explanation(
 
     y = model(x)
     y = y.view(x.size(0), -1)
-    y_correct = y[:, target_class] >= 0.5
+    if ignore_improb:
+        y_correct = y[:, target_class] >= 0.5
+    else:
+        y_correct = y[:, target_class] >= 0.0 # All True
 
     local_explanations = []
     local_explanations_raw = {}
