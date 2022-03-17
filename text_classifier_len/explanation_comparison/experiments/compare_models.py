@@ -10,6 +10,9 @@ from torch_explain_b.logic.nn.entropy import explain_class
 from lime import lime_tabular
 from lime.submodular_pick import SubmodularPick
 
+from text_classifier_len.explanation_comparison.experiments.utils import (
+    default_predict_fn,
+)
 from text_classifier_len.model_evaluation import train_model_without_dataloader
 from text_classifier_len.utils import get_single_stratified_split
 from text_classifier_len.utils import get_scores
@@ -85,14 +88,6 @@ def train_model_with_noise(
     test_scores = get_scores(y_pred, y_test)
 
     return clf, val_scores, test_scores, (x_train_pert, x_test_pert, y_train, y_test)
-
-
-def default_predict_fn(clf, inp):
-    predictions = clf.predict_proba(inp)
-    predictions = np.hstack(predictions)
-    idx = np.arange(1, predictions.shape[-1], 2)
-    predictions = predictions[:, idx]
-    return predictions
 
 
 def get_len_explanations(
@@ -194,7 +189,7 @@ def get_lime_explanations(
     num_features=5,
     num_exps_desired=5,
     predictor=default_predict_fn,
-    method="sample"
+    method="sample",
 ):
     explainer = lime_tabular.LimeTabularExplainer(
         x,
@@ -227,7 +222,7 @@ def run_single_experiment(
     vals=[0, 0.25],
     clf=None,
     discretize_continuous=False,
-    lime_sample_size = 10,
+    lime_sample_size=10,
 ):
     (
         clf,
@@ -273,5 +268,5 @@ def run_single_experiment(
         )
         lime_exps.append((lime_exp, explainer, x_train_pert[inp_idx]))
 
-    return val_scores, test_scores, (len_exp, model), lime_exps
+    return clf, val_scores, test_scores, (len_exp, model), lime_exps
 
