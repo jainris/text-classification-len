@@ -212,6 +212,7 @@ def _aggregate_explanations_2(local_explanations_accuracy, topk_explanations, ta
             include = i & (1 << np.arange(len(predictions))) > 0
             pred = predictions[np.nonzero(include)]
             pred = np.sum(pred, axis=0)
+            pred = pred > 0.5
 
             accuracy = np.sum(pred == y)
             if accuracy > best_accuracy:

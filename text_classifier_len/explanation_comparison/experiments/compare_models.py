@@ -11,7 +11,9 @@ from lime import lime_tabular
 from lime.submodular_pick import SubmodularPick
 
 from text_classifier_len.explanation_comparison.experiments.utils import (
+    check_trust_in_model_len,
     default_predict_fn,
+    check_trust_in_model_lime,
 )
 from text_classifier_len.model_evaluation import train_model_without_dataloader
 from text_classifier_len.utils import get_single_stratified_split
@@ -149,6 +151,9 @@ def get_len_explanations(
     with open("{}_0".format(model_path), "rb") as f:
         model.load_state_dict(torch.load(f))
 
+    # TODO: Check if the below line is needed
+    model.add_module("{}".format(sum(1 for _ in model.children())), torch.nn.Sigmoid())
+
     yt = 1 * (y_target > 0.5)
     xt, xv, yt, yv = get_single_stratified_split(x, yt, 10, 0)
 
@@ -245,10 +250,18 @@ def run_single_experiment(
             ["Noise Feature ({})".format(i + 1) for i in range(num_features)]
         )
 
+    untrustworthy_idx = np.arange(x.shape[-1], x.shape[-1] + num_features)
+
     print("--- Getting LEN Explanations ---")
     model, len_exp = get_len_explanations(
         clf, x_train_pert, y_train, model_path=model_path, concept_names=concept_names
     )
+    len_trust = True
+    for exp, _ in len_exp:
+        len_trust = check_trust_in_model_len(exp, concept_names, untrustworthy_idx)
+        if not len_trust:
+            break
+
     print("--- Getting LIME Explanations ---")
     if not isinstance(discretize_continuous, list):
         discretize_continuous = [discretize_continuous]
@@ -257,16 +270,32 @@ def run_single_experiment(
         inp_idx = np.arange(x_train_pert.shape[0])
         np.random.shuffle(inp_idx)
         inp_idx = inp_idx[:lime_sample_size]
+        inp = x_train_pert[inp_idx]
+
         explainer, lime_exp = get_lime_explanations(
             clf,
-            x_train_pert[inp_idx],
+            inp,
             y_train[inp_idx],
             concept_names=concept_names,
             tag_names=tag_names,
             discretize_continuous=dc,
             method="full",
         )
-        lime_exps.append((lime_exp, explainer, x_train_pert[inp_idx]))
 
-    return clf, val_scores, test_scores, (len_exp, model), lime_exps
+        trusts = []
+        for i, explanation in enumerate(lime_exp.sp_explanations):
+            for target in explanation.available_labels():
+                trusts.append(
+                    check_trust_in_model_lime(
+                        explainer,
+                        explanation,
+                        inp[i].reshape(1, -1),
+                        target,
+                        untrustworthy_idx,
+                    )
+                )
+
+        lime_exps.append((lime_exp, explainer, x_train_pert[inp_idx], trusts))
+
+    return clf, val_scores, test_scores, (len_exp, model, len_trust), lime_exps
 
