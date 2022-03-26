@@ -163,9 +163,23 @@ def get_len_explanations(
     xv = torch.FloatTensor(xv)
     yv = torch.FloatTensor(yv)
 
-    exps = []
+    org_exps = []
+    imp_exps = []
     for i in range(yt.size(-1)):
-        exps.append(
+        org_exps.append(
+            te.logic.entropy.explain_class(
+                model,
+                xt,
+                yt,
+                xv,
+                yv,
+                target_class=i,
+                max_minterm_complexity=max_minterm_complexity,
+                concept_names=concept_names,
+                topk_explanations=topk_explanations,
+            )
+        )
+        imp_exps.append(
             explain_class(
                 model,
                 xt,
@@ -180,7 +194,7 @@ def get_len_explanations(
             )
         )
 
-    return model, exps
+    return model, org_exps, imp_exps
 
 
 def get_lime_explanations(
@@ -255,13 +269,18 @@ def run_single_experiment(
     untrustworthy_idx = np.arange(x.shape[-1], x.shape[-1] + num_features)
 
     print("--- Getting LEN Explanations ---")
-    model, len_exp = get_len_explanations(
+    model, org_len_exp, imp_len_exp = get_len_explanations(
         clf, x_train_pert, y_train, model_path=model_path, concept_names=concept_names
     )
-    len_trust = True
-    for exp, _ in len_exp:
-        len_trust = check_trust_in_model_len(exp, concept_names, untrustworthy_idx)
-        if not len_trust:
+    org_len_trust = True
+    for exp, _ in org_len_exp:
+        org_len_trust = check_trust_in_model_len(exp, concept_names, untrustworthy_idx)
+        if not org_len_trust:
+            break
+    imp_len_trust = True
+    for exp, _ in imp_len_exp:
+        imp_len_trust = check_trust_in_model_len(exp, concept_names, untrustworthy_idx)
+        if not imp_len_trust:
             break
 
     print("--- Getting LIME Explanations ---")
@@ -299,5 +318,12 @@ def run_single_experiment(
 
         lime_exps.append((lime_exp, explainer, x_train_pert[inp_idx], trusts))
 
-    return clf, val_scores, test_scores, (len_exp, model, len_trust), lime_exps
+    return (
+        clf,
+        val_scores,
+        test_scores,
+        (org_len_exp, model, org_len_trust),
+        (imp_len_exp, model, imp_len_trust),
+        lime_exps,
+    )
 
