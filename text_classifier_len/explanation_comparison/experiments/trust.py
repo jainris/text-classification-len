@@ -104,17 +104,15 @@ def get_len_trust_vals(
     model.add_module("{}".format(sum(1 for _ in model.children())), torch.nn.Sigmoid())
 
     def check_len_trust(
-        input_array,
-        target,
-        untrustworthy_idx,
+        input_array, target, untrustworthy_idx, improve=True,
     ):
         input_tensor = torch.FloatTensor(input_array)
-        _, _, good, bad = local_explanation(
+        local_explanation_val, _, good, bad = local_explanation(
             model,
             input_tensor,
             target,
             max_minterm_complexity=max_minterm_complexity,
-            improve=True,
+            improve=improve,
             ignore_improb=False,
             feature_names=concept_names,
         )[0]
@@ -122,15 +120,40 @@ def get_len_trust_vals(
             np.nonzero(input_array[0, untrustworthy_idx] > 0)[0]
         ]
         switch_idx = switch_idx.reshape(-1)
-        return check_trust_in_model_len(good, concept_names, switch_idx)
+        if improve:
+            return check_trust_in_model_len(good, concept_names, switch_idx)
+        return check_trust_in_model_len(
+            local_explanation_val, concept_names, switch_idx
+        )
+
+    org_clt = lambda input_array, target, untrustworthy_idx: check_len_trust(
+        input_array=input_array,
+        target=target,
+        untrustworthy_idx=untrustworthy_idx,
+        improve=False,
+    )
+    improved_clt = lambda input_array, target, untrustworthy_idx: check_len_trust(
+        input_array=input_array,
+        target=target,
+        untrustworthy_idx=untrustworthy_idx,
+        improve=True,
+    )
 
     return (
         model,
-        *(
+        (
             get_trust_vals(
                 predict_fn=predict_fn,
                 inputs=trust_inps,
-                check_trust_in_model=check_len_trust,
+                check_trust_in_model=org_clt,
+                untrustworthy_idx=untrustworthy_idx,
+            )
+        ),
+        (
+            get_trust_vals(
+                predict_fn=predict_fn,
+                inputs=trust_inps,
+                check_trust_in_model=improved_clt,
                 untrustworthy_idx=untrustworthy_idx,
             )
         ),
@@ -179,6 +202,7 @@ def run_a_single_experiment_trust(
     len_args=None,
     device=torch.device("cpu"),
     discretize_continuous=[True],
+    random_state=None,
 ):
     if clf is None:
         clf = RandomForestClassifier(n_estimators=30)
@@ -193,9 +217,13 @@ def run_a_single_experiment_trust(
     )
 
     # Using only a fraction of the data to train the explainers
-    _, x_train, _, y_train = get_single_stratified_split(x, y, 5, 0)
+    _, x_train, _, y_train = get_single_stratified_split(
+        x, y, 5, random_state=random_state
+    )
     # Using an even smaller fraction of the data to get the trust values
-    _, trust_x, _, trust_y = get_single_stratified_split(x, y, 32, 0)
+    _, trust_x, _, trust_y = get_single_stratified_split(
+        x, y, 32, random_state=random_state
+    )
 
     model_path = "Model_123"
     max_minterm_complexity = 10

@@ -195,6 +195,7 @@ def get_lime_explanations(
     num_exps_desired=5,
     predictor=default_predict_fn,
     method="sample",
+    num_samples=5000,
 ):
     explainer = lime_tabular.LimeTabularExplainer(
         x,
@@ -211,6 +212,7 @@ def get_lime_explanations(
         num_features=num_features,
         num_exps_desired=num_exps_desired,
         method=method,
+        num_samples=num_samples,
     )
     return explainer, exp
 
