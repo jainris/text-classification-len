@@ -259,6 +259,8 @@ def run_single_experiment(
         vals=vals,
         clf=clf,
     )
+    if val_scores[1] - test_scores[1] < 0.03:
+        return None
 
     if len(concept_names) == x.shape[-1]:
         # Add names for the noises
@@ -318,6 +320,37 @@ def run_single_experiment(
 
         lime_exps.append((lime_exp, explainer, x_train_pert[inp_idx], trusts))
 
+    inp_idx = np.arange(x_train_pert.shape[0])
+    np.random.shuffle(inp_idx)
+    inp_idx = inp_idx[:250]
+    inp = x_train_pert[inp_idx]
+
+    explainer, lime_exp = get_lime_explanations(
+        clf,
+        inp,
+        y_train[inp_idx],
+        concept_names=concept_names,
+        tag_names=tag_names,
+        discretize_continuous=True,
+        method="full",
+        num_samples=20,
+    )
+
+    trusts = []
+    for i, explanation in enumerate(lime_exp.sp_explanations):
+        for target in explanation.available_labels():
+            trusts.append(
+                check_trust_in_model_lime(
+                    explainer,
+                    explanation,
+                    inp[i].reshape(1, -1),
+                    target,
+                    untrustworthy_idx,
+                )
+            )
+
+    more_lime = (lime_exp, explainer, x_train_pert[inp_idx], trusts)
+
     return (
         clf,
         val_scores,
@@ -325,5 +358,6 @@ def run_single_experiment(
         (org_len_exp, model, org_len_trust),
         (imp_len_exp, model, imp_len_trust),
         lime_exps,
+        more_lime
     )
 
