@@ -244,6 +244,7 @@ def run_single_experiment(
     clf=None,
     discretize_continuous=False,
     lime_sample_size=10,
+    threshold=0.03,
 ):
     (
         clf,
@@ -259,7 +260,7 @@ def run_single_experiment(
         vals=vals,
         clf=clf,
     )
-    if val_scores[1] - test_scores[1] < 0.03:
+    if val_scores[1] - test_scores[1] < threshold:
         return None
 
     if len(concept_names) == x.shape[-1]:
