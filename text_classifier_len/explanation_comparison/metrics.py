@@ -17,6 +17,7 @@ def calculate_max_sensitivity_len(
     inputs,
     target,
     n_perturb_samples=5,
+    explanation_func=len_explanation_func,
     perturb_func: Callable = default_perturb_func,
     perturb_radius: float = 0.02,
     max_minterm_complexity=10,
@@ -77,7 +78,7 @@ def calculate_max_sensitivity_len(
         current_n_perturb_samples = 1
         inputs_perturbed = _generate_perturbations(current_n_perturb_samples)
 
-        expl_perturbed_inputs = len_explanation_func(
+        expl_perturbed_inputs = explanation_func(
             model=model,
             input_tensor=inputs_perturbed,
             target=target,
@@ -96,7 +97,7 @@ def calculate_max_sensitivity_len(
     inputs = _format_input(inputs)  # type: ignore
 
     with torch.no_grad():
-        expl_inputs = len_explanation_func(
+        expl_inputs = explanation_func(
             model,
             input_tensor=inputs,
             target=target,
@@ -116,7 +117,7 @@ def calculate_max_sensitivity_len(
     return metrics_max
 
 
-def auc_morf(model, inputs, target, get_importance_sorted_inputs):
+def auc_morf(model, explainer, inputs, target, get_importance_sorted_inputs):
     def perturb_inputs_rem(inputs, target):
         inputs[:, target] = 0.0
         return inputs
@@ -146,7 +147,7 @@ def auc_morf(model, inputs, target, get_importance_sorted_inputs):
         inputs = inputs.view(1, -1)
     auc_morf = 0.0
 
-    importance_sorted_inputs = get_importance_sorted_inputs(model, inputs, target)
+    importance_sorted_inputs = get_importance_sorted_inputs(explainer, inputs, target)
     i, remove = next(importance_sorted_inputs)
     inputs = perturb_inputs_rem(inputs, i) if remove else perturb_inputs_add(inputs, i)
     y_prev, _ = get_prediction(model, inputs, target)
@@ -168,23 +169,26 @@ def auc_morf(model, inputs, target, get_importance_sorted_inputs):
     return auc_morf / num_perturbs
 
 
-def calculate_avg_auc_morf(model, inputs, get_importance_sorted_inputs):
+def calculate_avg_auc_morf(model, explainer, inputs, get_importance_sorted_inputs, ys=None):
     with torch.no_grad():
         auc_morfs = []
         if inputs.ndim == 1:
             inputs = inputs.view(1, -1)
         batch_size = inputs.size(0)
 
+        if ys is None:
+            ys = model(inputs) >= 0.5
+
         for b in range(batch_size):
             batch_auc_morfs = []
             x = inputs[b]
-            y = model(x).view(-1) >= 0.5
+            y = ys[b].view(-1)
 
             targets = torch.nonzero(y)
 
             for target in targets:
                 batch_auc_morfs.append(
-                    auc_morf(model, x, int(target), get_importance_sorted_inputs)
+                    auc_morf(model, explainer, x, int(target), get_importance_sorted_inputs)
                 )
 
             auc_morfs.append(batch_auc_morfs)

@@ -67,6 +67,56 @@ def len_explanation_func(
     return explanation
 
 
+def len_local_explanation_func(
+    model,
+    input_tensor: Tensor,
+    target: int,
+    max_minterm_complexity: int = 10,
+    concept_names=None,
+) -> str:
+    if isinstance(input_tensor, Tuple):
+        assert len(input_tensor) == 1, "Currently only support one input at a time"
+        input_tensor = input_tensor[0]
+    if input_tensor.ndim == 3:
+        assert input_tensor.size(0) == 1, "Currently only support one input at a time"
+        input_tensor = input_tensor[0]
+    _, _, good, _ = local_explanation(
+        model,
+        input_tensor,
+        target_class=target,
+        feature_names=concept_names,
+        max_minterm_complexity=max_minterm_complexity,
+        improve=True,
+        ignore_improb=False,
+    )[0]
+    return good
+
+
+def len_org_local_explanation_func(
+    model,
+    input_tensor: Tensor,
+    target: int,
+    max_minterm_complexity: int = 10,
+    concept_names=None,
+) -> str:
+    if isinstance(input_tensor, Tuple):
+        assert len(input_tensor) == 1, "Currently only support one input at a time"
+        input_tensor = input_tensor[0]
+    if input_tensor.ndim == 3:
+        assert input_tensor.size(0) == 1, "Currently only support one input at a time"
+        input_tensor = input_tensor[0]
+    explanation, _, _, _ = local_explanation(
+        model,
+        input_tensor,
+        target_class=target,
+        feature_names=concept_names,
+        max_minterm_complexity=max_minterm_complexity,
+        improve=False,
+        ignore_improb=False,
+    )[0]
+    return explanation
+
+
 def explanation_func_lime(model: Module, inputs: Tensor, target: int) -> Tensor:
     lime_explainer = Lime(model)
     explanation = lime_explainer.attribute(inputs, target=target)
@@ -88,7 +138,7 @@ def get_importance_sorted_inputs_lime_like(
 
 
 def get_importance_sorted_inputs_len(
-    model: Module, inputs: Tensor, target: int, max_minterm_complexity: int = 10
+    model: Module, inputs: Tensor, target: int, max_minterm_complexity: int = 10, explanation_func=len_local_explanation_func
 ) -> Generator[Tuple[int, bool], None, None]:
     def get_importance_from_fol_string(explanation: str) -> List[int]:
         def insert_in_binary(x: int, index: int, val: int) -> int:
@@ -121,7 +171,7 @@ def get_importance_sorted_inputs_len(
         return values
 
     concept_names = ["f{}".format(i) for i in range(inputs.size(-1))]
-    explanation = len_explanation_func(
+    explanation = explanation_func(
         model=model,
         input_tensor=inputs,
         target=target,
