@@ -91,7 +91,7 @@ class ModelEvaluator:
         )
 
     def get_training_and_testing_data(
-        self, questions_path, tag_path, number_of_unique_tags=100
+        self, questions_path, tag_path, number_of_unique_tags=10
     ):
         """
         Obtains the data from the given paths and splits it into training and

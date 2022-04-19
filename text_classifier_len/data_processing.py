@@ -17,6 +17,30 @@ np.random.seed(seed=0)
 
 
 class StackSampleDatasetLoader:
+    """
+    Class to load the StackSample Dataset. It creates a dataframe to handle the
+    dataset and for filtering.
+
+    Attributes
+    ----------
+    merged_df : pandas.DataFrame
+        The dataframe containing the loaded dataset.
+
+    Methods
+    -------
+    merge_questions_and_tags(questions_df, tags_df)
+        Combines the questions and tags dataframes to a single dataframe.
+
+    group_tags_together(tags_df)
+        Groups tags for the same question together.
+
+    filter_out_low_scoring_questions(score_threshold)
+        Filters low scoring questions out
+
+    print_dataset_deformitity_stats()
+        Utility function to print any deformities in the dataframe
+    """
+
     def __init__(
         self,
         questions_path,
@@ -25,6 +49,29 @@ class StackSampleDatasetLoader:
         filter_dataset=True,
         score_threshold=5,
     ):
+        """
+        Initializes the object and gets the training and testing data.
+
+        Parameters
+        ----------
+        questions_path : str
+            Path to the StackSample Questions CSV
+
+        tag_path : str
+            Path to the StackSample Tags CSV
+
+        encoding : str, optional
+            The encoding to be used when reading the CSVs.
+            Default value: "ISO-8859-1"
+
+        filter_dataset : bool, optional
+            If True, then low scoring questions are removed from the dataframe.
+            By default, set to True.
+
+        score_threhold : int, optional
+            If filter_dataset it True, then this value is used to determine
+            whether a question is low scoring or not. By default, set to 5.
+        """
         questions_df = pd.read_csv(questions_path, encoding=encoding)
         tags_df = pd.read_csv(tag_path, encoding=encoding)
 
@@ -40,6 +87,7 @@ class StackSampleDatasetLoader:
         self.merged_df.drop(columns=["Id", "Score"], inplace=True)
 
     def merge_questions_and_tags(self, questions_df, tags_df):
+        """ Combines the questions and tags dataframes to a single dataframe. """
         # First grouping tags of the same question together
         tags_df = self.group_tags_together(tags_df=tags_df)
 
@@ -54,14 +102,17 @@ class StackSampleDatasetLoader:
         return merged_df
 
     def group_tags_together(self, tags_df):
+        """ Groups tags for the same question together. """
         tags_df["Tag"] = tags_df["Tag"].astype(str)
         tags_df = tags_df.groupby("Id")["Tag"].apply(lambda tags: list(tags))
         return pd.DataFrame({"Id": tags_df.index, "Tags": tags_df.values})
 
     def filter_out_low_scoring_questions(self, score_threshold):
+        """ Filters low scoring questions out """
         self.merged_df = self.merged_df[self.merged_df["Score"] > score_threshold]
 
     def print_dataset_deformitity_stats(self):
+        """ Utility function to print any deformities in the dataframe """
         print("Null Values:")
         print(self.merged_df.isnull().sum(axis=0))
 
@@ -69,11 +120,33 @@ class StackSampleDatasetLoader:
 
 
 class DatasetProcessing:
+    """
+    Class for processing the dataframe.
+
+    Attributes
+    ----------
+    data_frame : pandas.DataFrame
+        The dataset.
+
+    frequent_tags : list
+        The list of frequent tags.
+
+    Methods
+    -------
+    filter_frequent_tags(number_of_unique_tags=10)
+        Filters the tags to a smaller number
+
+    question_text_processing()
+        Text processing for the questions
+    """
+
     def __init__(self, data_frame):
+        """ Class initilization """
         self.data_frame = data_frame
         self.frequent_tags = None
 
-    def filter_frequent_tags(self, number_of_unique_tags=100):
+    def filter_frequent_tags(self, number_of_unique_tags=10):
+        """ Filters the tags to a smaller number """
         # Calculating a list of most common tags
         flat_list_of_all_tags = [
             tag
@@ -102,6 +175,7 @@ class DatasetProcessing:
         self.data_frame.dropna(subset=["Tags"], inplace=True)
 
     def question_text_processing(self):
+        """ Text processing for the questions """
         print("Processing Body:")
         print("-> Removing HTML Tags from text")
         # Extracting text from HTML in the body
@@ -119,7 +193,23 @@ class DatasetProcessing:
 
 
 class TextProcessor:
+    """
+    Class which holds and applies all the text processing methods.
+
+    Attributes
+    ----------
+    tokenizer : ToktokTokenizer
+        Tokenizer.
+
+    frequent_tags : list
+        List of the frequent tags.
+
+    processed_text : str
+        The processed text.
+    """
+
     def __init__(self, text, frequent_tags):
+        """ Initializes the class """
         self.tokenizer = ToktokTokenizer()
         self.frequent_tags = frequent_tags
 
@@ -136,25 +226,29 @@ class TextProcessor:
         self.processed_text = text
 
     def get_processed_text(self):
+        """ Returns the processed text """
         return self.processed_text
 
     def clean_text(self, text):
+        """ Cleans the text of contractions, etc. """
         text = contractions.fix(text)
         text = text.lower()
         text = re.sub(r"\'scuse", " excuse ", text)
         text = re.sub(r"\'\n", " ", text)
         text = re.sub(r"\'\xa0", " ", text)
         text = re.sub("\s+", " ", text)
-        text = text.strip(" ")
+        text = text.strip()
         return text
 
     @staticmethod
     def strip_list(org_list):
+        """ Strip spaces for each element in list """
         new_list = [item.strip() for item in org_list]
         return [item for item in new_list if item != ""]
 
     @staticmethod
     def get_puncts():
+        """ Returns list of punctuations """
         # we want to remove all punctuations except dash
         puncts = ""
         for char in punctuation:
@@ -163,6 +257,10 @@ class TextProcessor:
         return puncts
 
     def clean_puncts(self, text):
+        """
+        Remove punctuations. Care is taken to not strip punctuations if these
+        lead to the tag being present in the question.
+        """
         words = self.tokenizer.tokenize(text)
         filtered_list = []
         regex = re.compile("[%s]" % re.escape(self.get_puncts()))
@@ -180,6 +278,7 @@ class TextProcessor:
         return " ".join(map(str, filtered_list))
 
     def lemmatize_words(self, text):
+        """ Lemmatizes words """
         lemmatizer = WordNetLemmatizer()
         words = self.tokenizer.tokenize(text)
         listLemma = []
@@ -194,6 +293,7 @@ class TextProcessor:
         return " ".join(map(str, listLemma))
 
     def remove_stopwords(self, text):
+        """ Removes stop words """
         try:
             stop_words = set(stopwords.words("english"))
         except LookupError:
@@ -205,7 +305,32 @@ class TextProcessor:
 
 
 class DataPreparer:
+    """
+    Data prepper, converting text to vectors.
+    
+    Attributes
+    ----------
+    data_frame : pandas.DataFrame
+        The dataframe containing the processed dataset.
+
+    tag_binarizer : MultiLabelBinarizer
+        Multi label binarizer for the tags.
+
+    title_vectorizer : TfidfVectorizer
+        TfidfVectorizer for the titles of the questions.
+
+    body_vectorizer : TfidfVectorizer
+        TfidfVectorizer for the body of the questions.
+
+    binarized_tags : np.ndarry
+        The binarized tags.
+
+    vectorized_questions : scipy.sparse.csr_matrix
+        The vectorized questions.
+    """
+
     def __init__(self, data_frame):
+        """ Class initialization """
         self.data_frame = data_frame
         self.tag_binarizer = MultiLabelBinarizer()
         self.title_vectorizer = TfidfVectorizer(
