@@ -12,9 +12,7 @@ from torch_explain_b.logic.nn.entropy import _local_explanation
 
 
 def avg_jaccard(y_true, y_pred):
-    """
-    see https://en.wikipedia.org/wiki/Multi-label_classification#Statistics_and_evaluation_metrics
-    """
+    """ Calculates the average Jaccard Index. """
     jaccard = np.minimum(y_true, y_pred).sum(axis=1) / np.maximum(y_true, y_pred).sum(
         axis=1
     )
@@ -23,6 +21,7 @@ def avg_jaccard(y_true, y_pred):
 
 
 def get_scores(y_pred, y_true):
+    """ Calculates all the scores. """
     return [
         metrics.fbeta_score(y_true, y_pred, beta=0.5, average="weighted"),
         metrics.f1_score(y_true, y_pred, average="weighted"),
@@ -34,6 +33,7 @@ def get_scores(y_pred, y_true):
 
 
 def print_score(scores=None, y_pred=None, y_true=None):
+    """ Prints the scores """
     if scores is None:
         assert y_pred is not None and y_true is not None
         scores = get_scores(y_pred=y_pred, y_true=y_true)
@@ -49,6 +49,7 @@ def print_score(scores=None, y_pred=None, y_true=None):
 
 
 def convert_scipy_csr_to_torch_coo(csr_matrix: sparse.csr.csr_matrix):
+    """ Converts a CSR matrix to COO Tensor """
     coo_matrix = csr_matrix.tocoo()
 
     values = coo_matrix.data
@@ -62,6 +63,7 @@ def convert_scipy_csr_to_torch_coo(csr_matrix: sparse.csr.csr_matrix):
 
 
 def get_single_stratified_split(X, y, n_splits, random_state=0):
+    """ Returns a single stratified split. Useful for test-train split """
     kfold = MultilabelStratifiedKFold(
         n_splits=n_splits, shuffle=True, random_state=random_state
     )
@@ -71,6 +73,7 @@ def get_single_stratified_split(X, y, n_splits, random_state=0):
 
 
 def get_learning_curves(history, epoch_limit=None):
+    """ Plots the learning curves """
     sns.set_theme(
         style="whitegrid", rc={"figure.figsize": (11.7, 8.27), "grid.linestyle": "--"}
     )
@@ -158,11 +161,49 @@ def local_explanation(
     target_class,
     module=None,
     feature_names=None,
-    max_minterm_complexity=50,
+    max_minterm_complexity=10,
     simplify=False,
-    improve=False,
+    improve=True,
     ignore_improb=True,
 ):
+    """
+    Gives the local explanation for a LEN model.
+
+    Parameters
+    ----------
+    model : torch.nn.Module
+        The model to be explained.
+
+    x : torch.nn.Tensor
+        The input to be explained.
+
+    target_class : int
+        The target class which we want explained.
+
+    module : torch.nn.Module, optional
+        If not None, then uses this specific module for obtaining explanation.
+        Else takes the first module the input encounters.
+
+    feature_names : list, optional
+        List containing the names of the input concepts.
+
+    max_minterm_complexity : int, optional
+        Maximum number of terms in conjunction. Default: 10.
+
+    simplify : bool, optional
+        If True, then simplifies the formula before returning. Default: False.
+
+    improve : bool, optional
+        If True, then uses the improved form of explanation extraction.
+        Else, uses the original method. Default: True.
+
+    ignore_improb : bool, optional
+        If True, then ignores the input if the model does not predict the
+        target class for given input x. Default: True.
+
+    local_explanations : list
+        List with an explanation for each valid input of x.
+    """
     if module is None:
         for mod in model.children():
             if isinstance(mod, EntropyLinear):
@@ -223,6 +264,7 @@ def local_explanation(
 def get_the_good_and_bad_terms(
     model, input_tensor, explanation, target, concept_names=None
 ):
+    """ Divides terms into good terms and bad terms """
     def perturb_inputs_rem(inputs, target):
         inputs[:, target] = 0.0
         return inputs
@@ -269,5 +311,6 @@ def get_the_good_and_bad_terms(
 
 
 def weight_reset(module, module_list):
+    """ Reset weights """
     if type(module) in module_list:
         module.reset_parameters()

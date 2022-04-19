@@ -37,7 +37,7 @@ class StackSampleDatasetLoader:
     filter_out_low_scoring_questions(score_threshold)
         Filters low scoring questions out
 
-    print_dataset_deformitity_stats()
+    print_dataset_deformity_stats()
         Utility function to print any deformities in the dataframe
     """
 
@@ -68,7 +68,7 @@ class StackSampleDatasetLoader:
             If True, then low scoring questions are removed from the dataframe.
             By default, set to True.
 
-        score_threhold : int, optional
+        score_threshold : int, optional
             If filter_dataset it True, then this value is used to determine
             whether a question is low scoring or not. By default, set to 5.
         """
@@ -111,7 +111,7 @@ class StackSampleDatasetLoader:
         """ Filters low scoring questions out """
         self.merged_df = self.merged_df[self.merged_df["Score"] > score_threshold]
 
-    def print_dataset_deformitity_stats(self):
+    def print_dataset_deformity_stats(self):
         """ Utility function to print any deformities in the dataframe """
         print("Null Values:")
         print(self.merged_df.isnull().sum(axis=0))

@@ -272,7 +272,7 @@ def create_and_train_len(
     y_train,
     batch_size=128,
     learning_rate=5e-3,
-    num_epochs=10,
+    num_epochs=500,
     save_the_model=False,
     model_path=None,
     use_cuda=True,
@@ -284,7 +284,38 @@ def create_and_train_len(
 
     Parameters
     ----------
-    TODO
+    x_train : scipy.sparse.csr.csr_matrix
+        The training input.
+
+    y_train : np.ndarray
+        The expected training output.
+
+    batch_size : int, optional
+        The batch size. Default: 128.
+
+    learning_rate : float, optional
+        The starting learning rate. Default: 5e-3.
+    num_epochs : int, optional
+        The number of epochs. Default: 500.
+
+    save_the_model : bool, optional
+        If True, then it saves the model with highest validation score.
+        Default: False.
+
+    model_path : str, optional
+        If save_the_model is True, then uses this as the path where model is
+        to be saved. Default: None.
+
+    use_cuda : bool, optional
+        If True, then uses cuda:0. Default: True.
+
+    load_model : bool, optional
+        If True, then loads the model from model_path. Default: False.
+
+    Returns
+    -------
+    model : torch.nn.Module
+        Trained model with a LEN layer.
     """
     device = torch.device("cuda:0" if use_cuda and torch.cuda.is_available() else "cpu")
 
@@ -327,7 +358,7 @@ def train_model(
     device,
     batch_size=128,
     learning_rate=5e-3,
-    num_epochs=10,
+    num_epochs=500,
     save_the_model=False,
     model_path=None,
     loss_func=None,
@@ -343,7 +374,68 @@ def train_model(
 
     Parameters
     ----------
-    TODO
+    model : torch.nn.Module
+        The model to be trained.
+
+    x_train : scipy.sparse.csr.csr_matrix
+        The training input.
+
+    y_train : np.ndarray
+        The expected training output.
+
+    device : torch.nn.device
+        The device on which training is to happen.
+
+    batch_size : int, optional
+        The batch size. Default: 128.
+
+    learning_rate : float, optional
+        The starting learning rate. Default: 5e-3.
+
+    num_epochs : int, optional
+        The number of epochs. Default: 500.
+
+    save_the_model : bool, optional
+        If True, then it saves the model with highest validation score.
+        Default: False.
+
+    model_path : str, optional
+        If save_the_model is True, then uses this as the path where model is
+        to be saved. Default: None.
+
+    loss_func : function, optional
+        The loss function to be used. If not provided, then uses a default
+        one involving Binary Cross Entropy.
+
+    n_splits : int, optional
+        Number of splits for cross validation. Default: 10.
+
+    learning_rate_scheduler_params : dict, optional
+        Parameters for the learning rate scheduler.
+
+    n_cv_iters : int, optional
+        Number of cross validation iterations to be taken. Normally, we want
+        to do an iteration for each split, but for testing only one would be
+        sufficient.
+
+    history_file_path : str, optional
+        If provided, then the learning curve history is saved at the location.
+
+    weight_reset_module_list : list, optional
+        For Cross-Validation, we need to reset the weights. These are the
+        layers for which the weights would be reset.
+        Default: [te.nn.logic.EntropyLinear, torch.nn.Linear].
+
+    optimizer_params : dict, optional
+        Parameters for the optimizer.
+
+    Returns
+    -------
+    model : torch.nn.Module
+        The trained model.
+
+    tot_history : list
+        The learning history.
     """
     if learning_rate_scheduler_params is None:
         learning_rate_scheduler_params = {
@@ -486,7 +578,7 @@ def train_model_without_dataloader(
     device,
     batch_size=128,
     learning_rate=5e-3,
-    num_epochs=10,
+    num_epochs=500,
     save_the_model=False,
     model_path=None,
     loss_func=None,
@@ -498,11 +590,72 @@ def train_model_without_dataloader(
     optimizer_params=dict(),
 ):
     """
-    Trains a PyTorch Model.
+    Trains a PyTorch Model without using dataloaders.
 
     Parameters
     ----------
-    TODO
+    model : torch.nn.Module
+        The model to be trained.
+
+    x_train : scipy.sparse.csr.csr_matrix
+        The training input.
+
+    y_train : np.ndarray
+        The expected training output.
+
+    device : torch.nn.device
+        The device on which training is to happen.
+
+    batch_size : int, optional
+        The batch size. Default: 128.
+
+    learning_rate : float, optional
+        The starting learning rate. Default: 5e-3.
+
+    num_epochs : int, optional
+        The number of epochs. Default: 500.
+
+    save_the_model : bool, optional
+        If True, then it saves the model with highest validation score.
+        Default: False.
+
+    model_path : str, optional
+        If save_the_model is True, then uses this as the path where model is
+        to be saved. Default: None.
+
+    loss_func : function, optional
+        The loss function to be used. If not provided, then uses a default
+        one involving Binary Cross Entropy.
+
+    n_splits : int, optional
+        Number of splits for cross validation. Default: 10.
+
+    learning_rate_scheduler_params : dict, optional
+        Parameters for the learning rate scheduler.
+
+    n_cv_iters : int, optional
+        Number of cross validation iterations to be taken. Normally, we want
+        to do an iteration for each split, but for testing only one would be
+        sufficient.
+
+    history_file_path : str, optional
+        If provided, then the learning curve history is saved at the location.
+
+    weight_reset_module_list : list, optional
+        For Cross-Validation, we need to reset the weights. These are the
+        layers for which the weights would be reset.
+        Default: [te.nn.logic.EntropyLinear, torch.nn.Linear].
+
+    optimizer_params : dict, optional
+        Parameters for the optimizer.
+
+    Returns
+    -------
+    model : torch.nn.Module
+        The trained model.
+
+    tot_history : list
+        The learning history.
     """
     if learning_rate_scheduler_params is None:
         learning_rate_scheduler_params = {
@@ -657,7 +810,7 @@ def train_len_model_with_another_model(
     device,
     batch_size=128,
     learning_rate=5e-3,
-    num_epochs=10,
+    num_epochs=500,
     save_the_model=False,
     model_path=None,
     loss_func=None,
@@ -669,12 +822,76 @@ def train_len_model_with_another_model(
     optimizer_params=dict(),
 ):
     """
-    Creates a model with a Linear Entropy Layer from Logic Explained Networks
-    and trains it with output from given model.
+    Trains a model based on the output of another model. (The reference model
+    can be non-deterministic)
 
     Parameters
     ----------
-    TODO
+    reference_model : torch.nn.Module
+        The reference model.
+
+    model : torch.nn.Module
+        The model to be trained.
+
+    x_train : scipy.sparse.csr.csr_matrix
+        The training input.
+
+    y_train : np.ndarray
+        The expected training output.
+
+    device : torch.nn.device
+        The device on which training is to happen.
+
+    batch_size : int, optional
+        The batch size. Default: 128.
+
+    learning_rate : float, optional
+        The starting learning rate. Default: 5e-3.
+
+    num_epochs : int, optional
+        The number of epochs. Default: 500.
+
+    save_the_model : bool, optional
+        If True, then it saves the model with highest validation score.
+        Default: False.
+
+    model_path : str, optional
+        If save_the_model is True, then uses this as the path where model is
+        to be saved. Default: None.
+
+    loss_func : function, optional
+        The loss function to be used. If not provided, then uses a default
+        one involving Binary Cross Entropy.
+
+    n_splits : int, optional
+        Number of splits for cross validation. Default: 10.
+
+    learning_rate_scheduler_params : dict, optional
+        Parameters for the learning rate scheduler.
+
+    n_cv_iters : int, optional
+        Number of cross validation iterations to be taken. Normally, we want
+        to do an iteration for each split, but for testing only one would be
+        sufficient.
+
+    history_file_path : str, optional
+        If provided, then the learning curve history is saved at the location.
+
+    weight_reset_module_list : list, optional
+        For Cross-Validation, we need to reset the weights. These are the
+        layers for which the weights would be reset.
+        Default: [te.nn.logic.EntropyLinear, torch.nn.Linear].
+
+    optimizer_params : dict, optional
+        Parameters for the optimizer.
+
+    Returns
+    -------
+    model : torch.nn.Module
+        The trained model.
+
+    tot_history : list
+        The learning history.
     """
     if learning_rate_scheduler_params is None:
         learning_rate_scheduler_params = {
@@ -824,11 +1041,32 @@ def test_torch_model(
     model, x_test, y_test, batch_size=128, device="cpu", print_scores=True
 ):
     """
-    Tests a PyTorch Model. Prints the obtained score.
+    Tests a PyTorch Model.
 
     Parameters
     ----------
-    TODO
+    model : torch.nn.Module
+        The model to be tested.
+
+    x_test : scipy.sparse.csr_matrix
+        The test input.
+
+    y_test : np.ndarray
+        The expected output.
+
+    batch_size: int, optional
+        The batch size. Default: 128.
+
+    device : str, optional
+        The device on which we are testing. Default: "cpu".
+
+    print_scores : bool, optional
+        If True then prints the test score. Default: True.
+
+    Returns
+    -------
+    scores : list
+        The scores on different metrics.
     """
     testing_dataset = SparseToDenseDataset(
         convert_scipy_csr_to_torch_coo(x_test), torch.FloatTensor(y_test), device=device
@@ -841,9 +1079,6 @@ def test_torch_model(
     y_true = []
     i = 0
     for x, y in testing_data_generator:
-        # if i == 50:
-        #     # Currently only testing limited samples
-        #     break
         i += 1
         print("\rBatch: [{}]".format(i), end="")
         y_preds.append(model(x).squeeze(-1).detach().cpu())
@@ -852,7 +1087,6 @@ def test_torch_model(
 
     print("")
 
-    # y_preds = [torch.nn.Sigmoid()(yy).detach().cpu().numpy() for yy in y_preds]
     y_preds = [yy.detach().cpu().numpy() for yy in y_preds]
 
     y_preds = y_preds[:-1]
@@ -875,6 +1109,7 @@ def test_torch_model(
 def get_len_explanation(
     model, x_train, y_train, evaluator, max_minterm_complexity=10,
 ):
+    """ Obtains global explanations for LEN """
     # Training-Validation Split
     x_train, x_val, y_train, y_val = get_single_stratified_split(
         x_train, y_train, n_splits=5, random_state=seed
@@ -914,6 +1149,7 @@ def get_len_explanation(
 def run_len(
     questions_path, tag_path, batch_size=128, learning_rate=5e-2, num_epochs=10
 ):
+    """ Does a complete run through the pipeline """
     print("Obtaining the dataset")
     evaluator = ModelEvaluator(questions_path=questions_path, tag_path=tag_path)
 
@@ -947,6 +1183,7 @@ def run_lime(
     idx_to_get_explanation=4,
     labels_for_explanation=[0, 2],
 ):
+    """ Complete run through pipeline using LIME """
     print("Obtaining the dataset")
     evaluator = ModelEvaluator(questions_path=questions_path, tag_path=tag_path)
 

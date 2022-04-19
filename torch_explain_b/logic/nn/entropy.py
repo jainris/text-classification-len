@@ -39,6 +39,7 @@ def explain_class(
     :param topk_explanations: number of local explanations to be combined.
     :param max_accuracy: if True a formula is simplified only if the simplified formula gets 100% accuracy.
     :param concept_names: list containing the names of the input concepts.
+    :param try_all: if True, then tries all possible conjunctions of the top k explanations.
     :return: Global explanation
     """
     x_correct, y_correct1h = _get_correct_data(x, y1h, model, target_class)
@@ -79,11 +80,6 @@ def explain_class(
 
                 idx_and_exp.append((positive_sample, local_explanation_raw))
 
-                # # test explanation accuracy
-                # if local_explanation_raw not in local_explanations_accuracies:
-                #     accuracy, _ = test_explanation(local_explanation_raw, x_val, y_val1h, target_class)
-                #     local_explanations_accuracies[local_explanation_raw] = (local_explanation, accuracy)
-
                 if local_explanation and local_explanation_raw:
                     local_explanations_raw[
                         local_explanation_raw
@@ -99,7 +95,6 @@ def explain_class(
                     concept_names=feature_names,
                 )
 
-                # good, bad = " & ".join(good), " & ".join(bad)
                 local_explanation_raw = " & ".join(good)
 
                 # test explanation accuracy
@@ -111,7 +106,7 @@ def explain_class(
 
             # aggregate local explanations and replace concept names in the final formula
             if try_all:
-                aggregated_explanation, best_acc = _aggregate_explanations_2(
+                aggregated_explanation, best_acc = _aggregate_explanations_try_all(
                     local_explanations_accuracies,
                     topk_explanations,
                     target_class,
@@ -120,7 +115,7 @@ def explain_class(
                     max_accuracy,
                 )
             else:
-                aggregated_explanation, best_acc = _aggregate_explanations_1(
+                aggregated_explanation, best_acc = _aggregate_explanations(
                     local_explanations_accuracies,
                     topk_explanations,
                     target_class,
@@ -178,7 +173,7 @@ def _simplify_formula(
     return explanation
 
 
-def _aggregate_explanations_1(
+def _aggregate_explanations(
     local_explanations_accuracy, topk_explanations, target_class, x, y, max_accuracy
 ):
     """
@@ -189,6 +184,7 @@ def _aggregate_explanations_1(
     :param target_class: target class.
     :param x: observations in validation set.
     :param y: labels in validation set.
+    :param max_accuracy: if True a formula is simplified only if the simplified formula gets 100% accuracy.
     :return:
     """
     if len(local_explanations_accuracy) == 0:
@@ -235,7 +231,7 @@ def _aggregate_explanations_1(
     return best_explanation, best_accuracy
 
 
-def _aggregate_explanations_2(
+def _aggregate_explanations_try_all(
     local_explanations_accuracy, topk_explanations, target_class, x, y, max_accuracy
 ):
     """
@@ -246,6 +242,7 @@ def _aggregate_explanations_2(
     :param target_class: target class.
     :param x: observations in validation set.
     :param y: labels in validation set.
+    :param max_accuracy: if True a formula is simplified only if the simplified formula gets 100% accuracy.
     :return:
     """
     if len(local_explanations_accuracy) == 0:
