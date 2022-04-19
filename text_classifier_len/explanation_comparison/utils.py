@@ -15,6 +15,7 @@ from text_classifier_len.utils import local_explanation
 
 
 def default_perturb_func(inputs: Tensor, perturb_radius: float = 0.02) -> Tensor:
+    """ Default perturbation function. Does a uniform perturbation """
     inputs = _format_input(inputs)
     perturbed_input = tuple(
         input
@@ -27,6 +28,7 @@ def default_perturb_func(inputs: Tensor, perturb_radius: float = 0.02) -> Tensor
 
 
 def get_attributes(formula: str) -> Tuple[Any, Set, List, Callable]:
+    """ Obtains attributes of given logic formula in str """
     if formula is None:
         return None, set(), list(), lambda *args: False
     formula = sympy.sympify(formula)
@@ -43,6 +45,7 @@ def len_explanation_func(
     max_minterm_complexity: int = 10,
     concept_names: Optional[List] = None,
 ) -> str:
+    """ Returns global explanations from LEN """
     if isinstance(input_tensor, Tuple):
         assert len(input_tensor) == 1, "Currently only support one input at a time"
         input_tensor = input_tensor[0]
@@ -74,6 +77,7 @@ def len_local_explanation_func(
     max_minterm_complexity: int = 10,
     concept_names=None,
 ) -> str:
+    """ Returns improved LEN local explanation """
     if isinstance(input_tensor, Tuple):
         assert len(input_tensor) == 1, "Currently only support one input at a time"
         input_tensor = input_tensor[0]
@@ -99,6 +103,7 @@ def len_org_local_explanation_func(
     max_minterm_complexity: int = 10,
     concept_names=None,
 ) -> str:
+    """ Returns original LEN local explanation """
     if isinstance(input_tensor, Tuple):
         assert len(input_tensor) == 1, "Currently only support one input at a time"
         input_tensor = input_tensor[0]
@@ -118,6 +123,7 @@ def len_org_local_explanation_func(
 
 
 def explanation_func_lime(model: Module, inputs: Tensor, target: int) -> Tensor:
+    """ Return LIME local explanation """
     lime_explainer = Lime(model)
     explanation = lime_explainer.attribute(inputs, target=target)
     return explanation.view(-1).detach().cpu().numpy()
@@ -129,6 +135,9 @@ def get_importance_sorted_inputs_lime_like(
     target: int,
     explanation_func: Callable[[Module, Tensor, int], Tensor],
 ) -> Generator[Tuple[int, bool], None, None]:
+    """
+    Returns a generator for importance sorted input for LIME like explanations
+    """
     explanation = explanation_func(model, inputs, target)
     exp_idx = [(explanation[i], i) for i in range(len(explanation))]
     exp_idx.sort(key=lambda x: np.abs(x[0]))
@@ -140,6 +149,9 @@ def get_importance_sorted_inputs_lime_like(
 def get_importance_sorted_inputs_len(
     model: Module, inputs: Tensor, target: int, max_minterm_complexity: int = 10, explanation_func=len_local_explanation_func
 ) -> Generator[Tuple[int, bool], None, None]:
+    """
+    Returns a generator for importance sorted input for LEN explanations
+    """
     def get_importance_from_fol_string(explanation: str) -> List[int]:
         def insert_in_binary(x: int, index: int, val: int) -> int:
             value_before_index = x & ((1 << index) - 1)
@@ -190,6 +202,10 @@ def get_importance_sorted_inputs_len(
 def get_importance_sorted_inputs_len_local(
     model: Module, inputs: Tensor, target: int, max_minterm_complexity: int = 5
 ) -> Generator[Tuple[int, bool], None, None]:
+    """
+    Returns a generator for importance sorted input for original LEN explanations.
+    Made faster for local explanations.
+    """
     def explanation_func(
         input_tensor: Tensor, target: int, max_minterm_complexity: int
     ) -> str:
@@ -245,6 +261,10 @@ def get_importance_sorted_inputs_len_local_2(
     max_minterm_complexity: int = 5,
     ignore_improb: bool = True,
 ) -> Generator[Tuple[int, bool], None, None]:
+    """
+    Returns a generator for importance sorted input for improved LEN explanations.
+    Made faster for local explanations.
+    """
     def explanation_func(
         input_tensor: Tensor,
         target: int,

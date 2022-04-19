@@ -1,8 +1,8 @@
 import numpy as np
-import torch
 
 
 def default_predict_fn(clf, inp):
+    """ Default prediction function """
     predictions = clf.predict_proba(inp)
     predictions = np.hstack(predictions)
     idx = np.arange(1, predictions.shape[-1], 2)
@@ -11,6 +11,7 @@ def default_predict_fn(clf, inp):
 
 
 def check_trust_in_model_len(exp, concept_names, untrustworthy_idx):
+    """ Checks trust in model according to LEN explanation """
     for i in untrustworthy_idx:
         if concept_names[i] in exp:
             return False
@@ -18,6 +19,7 @@ def check_trust_in_model_len(exp, concept_names, untrustworthy_idx):
 
 
 def check_trust_in_model_lime(explainer, exp, inp, target, untrustworthy_idx):
+    """ Checks trust in model according to LIME explanation """
     if explainer.discretizer is not None:
         inp = explainer.discretizer.discretize(inp)
     org_ans = exp.intercept[target]

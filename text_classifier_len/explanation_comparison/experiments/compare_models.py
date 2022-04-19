@@ -21,6 +21,7 @@ from text_classifier_len.utils import get_scores
 
 
 def get_appropriate_probabilities(probs, num_extra_features, num_targets):
+    """ Makes sure we have a probability for each tag and feature """
     if len(probs.shape) == 1:
         probs = probs.reshape(1, 1, -1)
     if len(probs.shape) == 2:
@@ -43,6 +44,7 @@ def get_appropriate_probabilities(probs, num_extra_features, num_targets):
 
 
 def add_artificial_noise(x, y, noise_probs, num_features=1, seed=None, vals=[0, 0.25]):
+    """ Adds artificial noise to our dataset """
     if seed is not None:
         np.random.seed(seed)
     noise_probs = get_appropriate_probabilities(noise_probs, num_features, y.shape[-1])
@@ -66,6 +68,7 @@ def add_artificial_noise(x, y, noise_probs, num_features=1, seed=None, vals=[0, 
 def train_model_with_noise(
     x, y, train_noise_probs, test_noise_probs, num_features=1, vals=[0, 0.25], clf=None,
 ):
+    """ Trains a model with some noise added to the dataset """
     x_test, x_train, y_test, y_train = get_single_stratified_split(x, y, 10)
     x_train_pert = add_artificial_noise(
         x_train, y_train, train_noise_probs, num_features, vals=vals
@@ -115,6 +118,7 @@ def get_len_explanations(
     max_minterm_complexity=15,
     topk_explanations=10,
 ):
+    """ Returns the Original and Improved LEN global explanations """
     if model is None:
         layers = [
             te.nn.EntropyLinear(x.shape[1], 8, n_classes=y.shape[1]),
@@ -211,6 +215,7 @@ def get_lime_explanations(
     method="sample",
     num_samples=5000,
 ):
+    """ Obtains SP-LIME global explanations """
     explainer = lime_tabular.LimeTabularExplainer(
         x,
         feature_names=concept_names,
@@ -246,6 +251,7 @@ def run_single_experiment(
     lime_sample_size=10,
     threshold=0.03,
 ):
+    """ Performs a single run of the Experiment B """
     (
         clf,
         val_scores,

@@ -20,6 +20,10 @@ from text_classifier_len.explanation_comparison.experiments.utils import (
 def get_trust_vals(
     predict_fn, inputs: torch.Tensor, check_trust_in_model, untrustworthy_idx
 ):
+    """
+    Returns the trust values as determined by the given explanation strategy
+    and the given model
+    """
     perturbed_input = copy.deepcopy(inputs)
     perturbed_input[:, untrustworthy_idx] = 0
 
@@ -73,6 +77,10 @@ def get_len_trust_vals(
     max_minterm_complexity=10,
     **kwargs
 ):
+    """
+    Returns the trust values from LEN for both original and improved
+    explanations
+    """
     if model is None:
         layers = [
             te.nn.EntropyLinear(x.shape[1], 8, n_classes=y.shape[1]),
@@ -166,10 +174,11 @@ def get_lime_trust_vals(
     y,
     predict_fn,
     trust_inps,
-    untrustorthy_idx,
+    untrustworthy_idx,
     discretize_continuous=False,
     **kwargs
 ):
+    """ Returns the trust values from LIME explanations """
     def check_lime_trust(input_array, target, untrustworthy_idx):
         assert len(input_array) == 1
         exp = explainer.explain_instance(input_array[0], predict_fn, [target], **kwargs)
@@ -185,7 +194,7 @@ def get_lime_trust_vals(
             predict_fn=predict_fn,
             inputs=trust_inps,
             check_trust_in_model=check_lime_trust,
-            untrustworthy_idx=untrustorthy_idx,
+            untrustworthy_idx=untrustworthy_idx,
         ),
     )
 
@@ -204,6 +213,7 @@ def run_a_single_experiment_trust(
     discretize_continuous=[True],
     random_state=None,
 ):
+    """ Performs a single run of Experiment A """
     if clf is None:
         clf = RandomForestClassifier(n_estimators=30)
 
@@ -268,7 +278,7 @@ def run_a_single_experiment_trust(
                 y=y_train,
                 predict_fn=predict_fn,
                 trust_inps=trust_x,
-                untrustorthy_idx=untrustworthy_idx,
+                untrustworthy_idx=untrustworthy_idx,
                 discretize_continuous=dc,
                 **lime_args
             )
