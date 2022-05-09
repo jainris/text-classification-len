@@ -28,17 +28,14 @@ class StackSampleDatasetLoader:
 
     Methods
     -------
-    merge_questions_and_tags(questions_df, tags_df)
+    merge_questions_and_tags
         Combines the questions and tags dataframes to a single dataframe.
 
-    group_tags_together(tags_df)
+    group_tags_together
         Groups tags for the same question together.
 
-    filter_out_low_scoring_questions(score_threshold)
+    filter_out_low_scoring_questions
         Filters low scoring questions out
-
-    print_dataset_deformity_stats()
-        Utility function to print any deformities in the dataframe
     """
 
     def __init__(
@@ -111,13 +108,6 @@ class StackSampleDatasetLoader:
         """ Filters low scoring questions out """
         self.merged_df = self.merged_df[self.merged_df["Score"] > score_threshold]
 
-    def print_dataset_deformity_stats(self):
-        """ Utility function to print any deformities in the dataframe """
-        print("Null Values:")
-        print(self.merged_df.isnull().sum(axis=0))
-
-        print("\nDuplicate entries: {}".format(self.merged_df.duplicated().sum()))
-
 
 class DatasetProcessing:
     """
@@ -133,10 +123,10 @@ class DatasetProcessing:
 
     Methods
     -------
-    filter_frequent_tags(number_of_unique_tags=10)
+    filter_frequent_tags
         Filters the tags to a smaller number
 
-    question_text_processing()
+    question_text_processing
         Text processing for the questions
     """
 

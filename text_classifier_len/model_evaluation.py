@@ -63,13 +63,11 @@ class ModelEvaluator:
 
     Methods
     -------
-    get_training_and_testing_data(
-        questions_path, tag_path, number_of_unique_tags=100
-    )
+    get_training_and_testing_data
         Obtains the data from the given paths and splits it into training and
         testing data.
 
-    evaluate(classifier, one_vs_rest=False)
+    evaluate
         Given a sklearn classifier, gives the prediction after fitting the
         classifier.
     """

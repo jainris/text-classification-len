@@ -9,7 +9,8 @@ from text_classifier_len.data_processing import DataPreparer
 
 def test_stack_sample_dataset_loader():
     stack_sample_loader = StackSampleDatasetLoader(
-        questions_path="tests/sample_dataset/Questions.csv", tag_path="tests/sample_dataset/Tags.csv"
+        questions_path="tests/sample_dataset/Questions.csv",
+        tag_path="tests/sample_dataset/Tags.csv",
     )
 
     assert stack_sample_loader.merged_df.columns.tolist() == ["Title", "Body", "Tags"]
@@ -35,5 +36,7 @@ def test_dataset_processing_and_data_preparer():
     data_prepper = DataPreparer(data_frame=data_frame)
 
     # All values should be either 1 or 0
-    assert np.logical_or(data_prepper.binarized_tags == 1, data_prepper.binarized_tags == 0).all()
+    assert np.logical_or(
+        data_prepper.binarized_tags == 1, data_prepper.binarized_tags == 0
+    ).all()
     assert data_prepper.vectorized_questions is not None
