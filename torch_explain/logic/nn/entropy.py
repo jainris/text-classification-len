@@ -5,11 +5,11 @@ import torch
 import numpy as np
 from sympy import simplify_logic
 
-from torch_explain_b.logic.metrics import test_explanation
-from torch_explain_b.logic.utils import replace_names
-from torch_explain_b.logic.utils import get_predictions
-from torch_explain_b.logic.utils import get_the_good_and_bad_terms
-from torch_explain_b.nn import Conceptizator
+from torch_explain.logic.metrics import test_explanation
+from torch_explain.logic.utils import replace_names
+from torch_explain.logic.utils import get_predictions
+from torch_explain.logic.utils import get_the_good_and_bad_terms
+from torch_explain.nn import Conceptizator
 from torch_explain.nn.logic import EntropyLinear
 
 

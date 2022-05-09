@@ -6,7 +6,7 @@ import numpy as np
 from sympy import sympify, to_dnf
 from sympy.logic import simplify_logic
 
-from torch_explain_b.logic.nn.utils import _collect_parameters
+from torch_explain.logic.nn.utils import _collect_parameters
 
 
 def explain_class(model: torch.nn.Module, x: torch.tensor = None, concept_names: list = None,
